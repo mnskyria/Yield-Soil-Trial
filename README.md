@@ -15,11 +15,11 @@ This readme file was generated on 2026-03-18 by Matthew Kyriakides
 
 # General Information
 
-1. Title of Dataset: Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data) 
+1. **Title of Dataset:** Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data) 
    
    
 
-2. Author Information
+2. **Author Information:**
    
         Name: Matthew Kyriakides
         ORCID:
@@ -27,7 +27,7 @@ This readme file was generated on 2026-03-18 by Matthew Kyriakides
         Address: Turpin B156. 3800 Finnerty Rd, Victoria, BC V8N 4V3
         Email: mnskyria@uvic.ca
    
-   Point of Contact
+   **Point of Contact:**
    
         Name: 
         ORCID:
