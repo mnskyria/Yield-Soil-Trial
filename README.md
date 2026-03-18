@@ -79,22 +79,32 @@ DATA & FILE OVERVIEW
       
           Yield-Soil-Trial/
           │
-          ├── Chapter 2 - Soil.Rproj    # RStudio project (open this)
-          ├── README.md                  # Project documentation
-          ├── .Rprofile                  # auto-activates renv
-          ├── renv.lock                  # reproducible package versions
+          ├── Chapter 2 - Soil.Rproj         # RStudio project (open this)
+          ├── README.md                       # Project documentation
+          ├── .Rprofile                       # auto-activates renv
+          ├── renv.lock                       # reproducible package versions
           │
-          ├── data/                      # input data (not included — private)
-          ├── outputs/                   # all generated tables, figures, logs
-          │   ├── AIC/
-          │   ├── Data Summaries/
-          │   ├── Final Figures/
-          │   ├── Model Summaries/
-          │   ├── Model with Raw Outputs/
-          │   └── Residual Diagnostics/
-          └── scripts/                   # all analysis code
-              ├── run_all.R              # master pipeline runner
-              ├── utils.R                # shared data objects and helper functions
+          ├── data/                           # input data (not included — private)
+          ├── outputs/                        # all generated tables, figures, logs
+          │   ├── AIC/                        # AIC model rankings and candidate models
+          │   ├── Data Summaries/             # mean ± SE summaries by year and treatment
+          │   ├── Model Summaries/            # LM outputs and emmeans contrasts (Excel)
+          │   ├── Model with Raw Outputs/     # model prediction plots with raw data
+          │   ├── Residual Diagnostics/       # QQ plots, histograms, Shapiro-Wilk results
+          │   └── Final Figures/              # publication-ready figures
+          │       ├── Balanced Model Verification/  # balanced vs raw sensitivity figures
+          │       ├── Fertility Threshold Plots/    # macro and micronutrient threshold figures
+          │       ├── Forest Plots/                 # standardized change forest plots
+          │       └── LM Outputs/                   # model prediction figures
+          │           ├── AIC Models/               # bean ~ NH4 and carrot ~ Mg plots
+          │           ├── Kale Model/               # kale yield model (Years 2-3)
+          │           ├── Slakes Model/             # aggregate stability model
+          │           ├── Soil Models (Balanced)/   # soil indicators, balanced dataset
+          │           ├── Soil Models (Full)/       # soil indicators, raw dataset
+          │           └── Yield Models/             # crop yield models (Years 1-3)
+          └── scripts/                        # all analysis code
+              ├── run_all.R                   # master pipeline runner
+              ├── utils.R                     # shared data objects and helper functions
               ├── 01_Load_Clean.R
               ├── 02_Summaries.R
               ├── 03_Models_Soil.R
@@ -139,9 +149,9 @@ DATA & FILE OVERVIEW
       
       14. **12_Figure_Fertility-Threshold-Macro.R:** Macronutrient threshold figures (NH4, P, K, Mg)
       
-      15. **13_Figure_Fertility-Threshold-Micro.R:** Micronutrientthreshold figures (Cu, Mn, Zn)
+      15. **13_Figure_Fertility-Threshold-Micro.R:** Micronutrient threshold figures (Cu, Mn, Zn)
 
-2. **Relationship between files, if important:**  `scripts/run_all.R` sources the numbered scripts in order and writes outputs into `outputs/`.  Helper functions in `R/` are imported by analysis scripts.
+2. **Relationship between files, if important:**  `scripts/run_all.R` sources the numbered scripts in order and writes outputs into `outputs/`.  Helper functions in `utils` are imported by analysis scripts.
 
 3. **Additional related data collected that was not included in the current data package:** 
 
@@ -166,7 +176,7 @@ METHODOLOGICAL INFORMATION
    All analyses were conducted in RStudio (v.2025.05.0) on Windows 11 using R (v4.5.1) on a 2023 ASUS Vivobook (K5504VA, Intel Core i9-13900H). R packages used: `tidyverse`, `car`, `emmeans`, `MuMIn`, `scales`, `patchwork`, `openxlsx`, `broom`.
 
 4. **Standards and calibration information, if appropriate:** 
-   Bulk soil samples were air dried and sieved through 8 mm and 2 mm screens. Baseline (T0) samples were collected June 2022 (0–15 cm depth); follow-up sampling occurred each autumn from 2022–2024. One composite sample per treatment replicate was collected at T0 (n = 20); three subsamples per replicate were collected in subsequent years (n = 60 per year). Soil pH was measured in 0.01M CaCl2 using a Fisher Brand Accumet AB150 pH/mV meter. Electrical conductivity was determined in a 1:2 soil:water solution. Ammonium mineralization was quantified via 7-day anaerobic incubation followed by colorimetric analysis. Total nitrogen and organic carbon were measured by dry combustion using an Elementar SoliToc cube. Extractable macro and micronutrients (P, K, Ca, Mg, Cu, Fe, Mn, Zn) were analyzed with a Mehlich-3 extraction and quantified using an Agilent 7900 ICP-MS. Permanganate oxidizable carbon (POX-C) was measured colorimetrically. Aggregate stability followed the SLAKES protocol. Bulk density (0–8 cm) used the field-composited soil core method with stone correction. Full fertility and condition analyses were conducted at T0, 2022, and 2024; 2023 included a subset of condition analyses only.*
+   Bulk soil samples were air dried and sieved through 8 mm and 2 mm screens. Baseline (T0) samples were collected June 2022 (0–15 cm depth); follow-up sampling occurred each autumn from 2022–2024. One composite sample per treatment replicate was collected at T0 (n = 20); three subsamples per replicate were collected in subsequent years (n = 60 per year). Soil pH was measured in 0.01M CaCl2 using a Fisher Brand Accumet AB150 pH/mV meter. Electrical conductivity was determined in a 1:2 soil:water solution. Ammonium mineralization was quantified via 7-day anaerobic incubation followed by colorimetric analysis. Total nitrogen and organic carbon were measured by dry combustion using an Elementar SoliToc cube. Extractable macro and micronutrients (P, K, Ca, Mg, Cu, Fe, Mn, Zn) were analyzed with a Mehlich-3 extraction and quantified using an Agilent 7900 ICP-MS. Permanganate oxidizable carbon (POX-C) was measured colorimetrically. Aggregate stability followed the SLAKES protocol. Bulk density (0–8 cm) used the field-composited soil core method with stone correction. Full fertility and condition analyses were conducted at T0, 2022, and 2024; 2023 included a subset of condition analyses only.
 
 5. **Environmental/experimental conditions:** 
    The experiment took place in a warm-summer Mediterranean climate (Csb; mean annual temperature ≈ 9.5°C; annual precipitation ≈ 880 mm). The site features sandy loam soils (57.6% sand, 23.2% silt, 19.2% clay) derived from Brunisolic, Gleysolic, and Anthropogenic series.
@@ -189,40 +199,39 @@ DATA-SPECIFIC INFORMATION FOR: final data-R.xslx
 
 **Missing data codes:** All missing values coded as `na` in Excel and converted to `NA` in R via `na = "na"` in `read_excel()`.
 
-| **Type of Variable**            | **Type of Data**                          | R Label   | **n** | **Absent Data**                         |
-| ------------------------------- | ----------------------------------------- | --------- | ----- | --------------------------------------- |
-| Treatment                       | Categorical, ordinal (5 levels: 1-5)      | treatment | 200   | None absent                             |
-| Bed                             | Categorical, discrete (60 levels: 1-60)   |           | 180   | T0 – all (20)                           |
-| Year                            | Categorical, discrete (4 levels: 4 times) |           | 200   | None absent                             |
-| **Response Variable**           |                                           |           |       |                                         |
-| pH                              | Numerical, continuous                     | pH        | 199   | 2022: 14 (1)                            |
-| Electrical conductivity (us/cm) |                                           | ES        |       |                                         |
-| Total nitrogen (%)              | Numerical, continuous                     | TotalN    | 140   | 2023: all (60)                          |
-| NH4+ mineralization (ppm)       | Numerical, continuous                     | NH4       | 140   | 2023: all (60)                          |
-| Bray-1 phosphorus (ppm)         | Numerical, continuous                     | BrayP     | 140   | 2023: all (60)                          |
-| MIII phosphorus (ppm)           | Numerical, continuous                     | P         | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII potassium (ppm)            | Numerical, continuous                     | K         | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII calcium (ppm)              | Numerical, continuous                     | Ca        | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII magnesium (ppm)            | Numerical, continuous                     | Mg        | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII copper (ppm)               | Numerical, continuous                     | Cu        | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII iron (ppm)                 | Numerical, continuous                     | Fe        | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII manganese (ppm)            | Numerical, continuous                     | Mn        | 139   | T0: treatment 4-3, 2023: all (61)       |
-| MIII zinc (ppm)                 | Numerical, continuous                     | Zn        | 139   | T0: treatment 4-3, 2023: all (61)       |
-| Bulk density (g/cm3)            | Numerical, continuous                     | BD        | 200   | None absent                             |
-| Aggregate stability (STAB10)    | Numerical, continuous                     | STAB      | 180   | T0: all (20)                            |
-| Field capacity (%)              | Numerical, continuous                     | FC        | 194   | 2022: 28. 2024: 41, 45, 48, 58, 59 (6)  |
-| Sand (%)                        | Numerical, continuous                     | sand      | 194   | 2022, 2023, 2024: 1, 31 (6)             |
-| Silt (%)                        | Numerical, continuous                     | silt      | 194   | 2022, 2023, 2024: 1, 31 (6)             |
-| Clay (%)                        | Numerical, continuous                     | clay      | 194   | 2022, 2023, 2024: 1, 31 (6)             |
-| Soil organic carbon (%)         | Numerical, continuous                     | orgC      | 200   | None absent.                            |
-| Carbon (%)                      | Numerical, continuous                     | C         | 200   | None absent                             |
-| POX-C (mg/kg)                   | Numerical, continuous                     | POXC      | 139   | T0: treatment 4-3. 2023: all (61)       |
-| Bean harvest (g)                | Numerical, continuous                     | bean      | 60    | T0: all. 2022, 2023, 2024: all non bean |
-| Carrot gr. 1 harvest (g)        | Numerical, continuous                     | carrot1   | 60    | T0: all. 2022, 2023, 2024: all non carr |
-| Carrot gr. 2 harvest (g)        | Numerical, continuous                     | carrot2   | 60    | T0: all. 2022, 2023, 2024: all non carr |
-| Carrot top harvest (g)          | Numerical, continuous                     | carrotTop | 60    | T0: all. 2022, 2023, 2024: all non carr |
-| Kale harvest (g)                | Numerical, continuous                     | kale      | 60    | T0: all. 2022, 2023, 2024: all non kale |
+| **Type of Variable**            | **Type of Data**                          | R Label    | **n** | **Absent Data**                           |
+| ------------------------------- | ----------------------------------------- | ---------- | ----- | ----------------------------------------- |
+| Treatment                       | Categorical, ordinal (5 levels: 1-5)      | treatment  | 200   | None absent                               |
+| Bed                             | Categorical, discrete (60 levels: 1-60)   |            | 180   | T0 – all (20)                             |
+| Year                            | Categorical, discrete (4 levels: 4 times) |            | 200   | None absent                               |
+| **Response Variable**           |                                           |            |       |                                           |
+| pH                              | Numerical, continuous                     | pH         | 199   | 2022: 14 (1)                              |
+| Electrical conductivity (us/cm) | Numerical, continuous                     | EC         | 140   | 2023: all (60)                            |
+| Total nitrogen (%)              | Numerical, continuous                     | TotalN     | 140   | 2023: all (60)                            |
+| NH4+ mineralization (ppm)       | Numerical, continuous                     | NH4        | 140   | 2023: all (60)                            |
+| Bray-1 phosphorus (ppm)         | Numerical, continuous                     | BrayP      | 140   | 2023: all (60)                            |
+| MIII phosphorus (ppm)           | Numerical, continuous                     | P          | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII potassium (ppm)            | Numerical, continuous                     | K          | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII calcium (ppm)              | Numerical, continuous                     | Ca         | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII magnesium (ppm)            | Numerical, continuous                     | Mg         | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII copper (ppm)               | Numerical, continuous                     | Cu         | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII iron (ppm)                 | Numerical, continuous                     | Fe         | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII manganese (ppm)            | Numerical, continuous                     | Mn         | 139   | T0: treatment 4-3, 2023: all (61)         |
+| MIII zinc (ppm)                 | Numerical, continuous                     | Zn         | 139   | T0: treatment 4-3, 2023: all (61)         |
+| Bulk density (g/cm3)            | Numerical, continuous                     | BD         | 200   | None absent                               |
+| Aggregate stability (STAB10)    | Numerical, continuous                     | STAB       | 180   | T0: all (20)                              |
+| Field capacity (%)              | Numerical, continuous                     | FC         | 194   | 2022: 28. 2024: 41, 45, 48, 58, 59 (6)    |
+| Sand (%)                        | Numerical, continuous                     | sand       | 194   | 2022, 2023, 2024: 1, 31 (6)               |
+| Silt (%)                        | Numerical, continuous                     | silt       | 194   | 2022, 2023, 2024: 1, 31 (6)               |
+| Clay (%)                        | Numerical, continuous                     | clay       | 194   | 2022, 2023, 2024: 1, 31 (6)               |
+| Soil organic carbon (%)         | Numerical, continuous                     | orgC       | 200   | None absent.                              |
+| Carbon (%)                      | Numerical, continuous                     | C          | 200   | None absent                               |
+| POX-C (mg/kg)                   | Numerical, continuous                     | POXC       | 139   | T0: treatment 4-3. 2023: all (61)         |
+| Bean harvest (g)                | Numerical, continuous                     | bean       | 60    | T0: all. 2022, 2023, 2024: all non bean   |
+| Carrot gr. 1 harvest (g)        | Numerical, continuous                     | carrot1    | 60    | T0: all. 2022, 2023, 2024: all non carrot |
+| Carrot gr. 2 harvest (g)        | Numerical, continuous                     | carrot2    | 60    | T0: all. 2022, 2023, 2024: all non carrot |
+| Carrot top harvest (g)          | Numerical, continuous                     | carrotTop  | 60    | T0: all. 2022, 2023, 2024: all non carrot |
+| Kale harvest (g)                | Numerical, continuous                     | kale       | 60    | T0: all. 2022, 2023, 2024: all non kale   |
+| Total harvest (g)               | Numerical, continuous                     | TotalYield | 180   | T0: all                                   |
 
-*Specialized formats or other abbreviations used:** The formats follow those used in the raw data that was compiled to make this. 
-
-
+**Specialized formats or other abbreviations used:** The formats follow those used in the raw data that was compiled to make this. 
