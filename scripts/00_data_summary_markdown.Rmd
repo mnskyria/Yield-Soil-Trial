@@ -1,0 +1,2557 @@
+---
+title: "Exploratory T0-2024 Data"
+author: "Matthew Kyriakides"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  dev.args = list(bg = "white"),
+  fig.bg   = "white",
+  fig.lp   = "fig:",
+  echo     = FALSE,
+  message  = FALSE,
+  warning  = FALSE
+)
+
+options(knitr.table.format = "html")
+```
+
+# Exploratory T0-2024 Data
+
+# Data Analysis Pipeline
+
+This file is an exploratory description of the treatments effects for 2024 data compared to T0 baseline. The steps in the pipeline are as follows:
+
+1.  Visually examine each indicator to see the multi-year trend and identify any potentially anomalous results.
+2.  Create a datasheet that only contains T0 and 2024 data. As T0 has n=20 and 2024 has n=60, aggregate sub-samples so that each observational unit (e.g., treatment-replicate like 1-1, 1-2, etc.) contributes one value per year per indicator. This yields a balanced or near-balanced dataset at the unit level, rather than at the raw sample level.
+3.  Create a linear model for each soil indicator \~ treatment combination, e.g. lm(ph \~ treatment \* year).
+4.  Run residual diagnostics both statistically (Shapiro-Wilk) and graphically (QQ plot, histogram, residual vs fitted). If non-parametric, examine alternative such as Kruskal-Wallis before considering transformation.
+5.  For parametric models, perform Type II (or III) ANOVA, then, for significant terms, derive emmeans and pairwise Tukey-adjusted comparisons to quantify differences among treatments and between T0 vs 2024 within treatments.
+
+This file is meant to show the manual results of the models. A final batch function will be created at the end which will examine everything automatically and output an excel sheet with the values.
+
+# Questions for Nancy:
+
+1.  Does it make sense to you to focus Chapter 2 on the 2024 vs T0 comparison, and use 2022–2023 mainly as context? Are there any risks or missed opportunities with that focus? Do I still have enough statistical power?
+
+    1.  feels like a loss; can I think as time as a linear process? this is fine for soil
+
+2.  For yields, what do you think is the most defensible framing: using all three years, or focusing on 2024 only (when the rotation was complete and all crops had been in all treatments)?”
+
+    1.  defend; either way works
+
+3.  Some carrot and kale models show small within-year treatment differences, but these differences disappear when I look at total bed-level productivity. In that context, is it still fair to say ‘no statistically significant treatment effect on overall yield’, with a short caveat about those crop-level nuances?
+
+4.  As a reader/reviewer, what one or two figures would you most want to see for the yield results? Soil results? #model outputs with raw data. everything should be shown but most can go in supplements
+
+5.  I’m leaning toward a title along the lines of ‘Maintaining Yields While Reducing External Inputs…’. Given the current results, do you think that wording is honest and defensible, or would you soften or adjust it?
+
+6.  I am currently creating a slide deck for a presentation on my research in January which is helping me to clarify the narrative of the chapter. Is there anything you think I should emphasize more, either in terms of scientific framing, what the results mean, or the implications for farmers and reclamation work?
+
+    look at residuals against random and fixed effects, look at each of the individual treatment types, are there issues with residual behaviour
+
+7.  
+
+## Data Analysis Functions
+
+### T0-2024 Dataframe Creation
+
+```{r T0-2024-sheet, echo=FALSE}
+# ---------------------------
+# 1. Define indicator columns
+# ---------------------------
+INDICATORS <- c(
+  "pH", "EC", "totalN", "NH4", "BrayP", "P", "K", "Ca", "Mg",
+  "Cu", "Fe", "Mn", "Zn",
+  "SOC", "SLAKES", "BD", "POXC", "CN"
+)
+
+# Master ordered year vector
+YEAR_LEVELS <- c("T0", "2022", "2023", "2024")
+
+
+# ---------------------------
+# 2. Collapse (average) subsamples for 2024
+# ---------------------------
+dat_2024_trt_rep_means <- dat %>%
+  filter(year == "2024") %>%
+  group_by(trt_rep, treatment, replicate) %>%
+  summarise(
+    across(all_of(INDICATORS), ~ mean(.x, na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  mutate(year = factor("2024", levels = YEAR_LEVELS)) %>%   # ⭐ FIX HERE
+  arrange(treatment, replicate)
+
+
+# ---------------------------
+# 3. Keep T0 as-is
+# ---------------------------
+dat_T0 <- dat %>%
+  filter(year == "T0") %>%
+  select(trt_rep, treatment, replicate, year, all_of(INDICATORS)) %>%
+  mutate(year = factor(year, levels = YEAR_LEVELS)) %>%     # ⭐ FIX HERE
+  arrange(treatment, replicate)
+
+
+# ---------------------------
+# 4. Combine T0 + 2024
+# ---------------------------
+dat_2024_T0 <- bind_rows(dat_T0, dat_2024_trt_rep_means) %>%
+  arrange(treatment, replicate, year)
+
+```
+
+### Summary Plot & Table Function
+
+I have `mean(pH)` on average
+
+```{r summary-and-plot-function, echo=FALSE}
+library(tidyverse)
+library(gt)
+library(rlang)
+
+# Optional helper
+`%||%` <- function(x, y) if (!is.null(x)) x else y
+
+TREAT_LABELS <- c(
+  "1",
+  "2",
+  "3",
+  "4",
+  "5"
+)
+
+# ---- 1) Summary: mean ± SE by year × treatment (+ All row) ----
+summarise_treat_year <- function(data, var) {
+  var_quo <- enquo(var)
+
+  per_year <- data %>%
+    filter(!is.na(!!var_quo)) %>%
+    group_by(year, treatment) %>%
+    summarise(
+      n    = sum(!is.na(!!var_quo)),
+      mean = mean(!!var_quo, na.rm = TRUE),
+      se   = sd(!!var_quo,   na.rm = TRUE) / sqrt(n),
+      .groups = "drop"
+    ) %>%
+    mutate(year = as.character(year))
+
+  all_years <- data %>%
+    filter(!is.na(!!var_quo)) %>%
+    group_by(treatment) %>%
+    summarise(
+      n    = sum(!is.na(!!var_quo)),
+      mean = mean(!!var_quo, na.rm = TRUE),
+      se   = sd(!!var_quo,   na.rm = TRUE) / sqrt(n),
+      .groups = "drop"
+    ) %>%
+    mutate(year = "All")
+
+  bind_rows(per_year, all_years) %>%
+    mutate(
+      treatment = factor(treatment, levels = 1:5, labels = TREAT_LABELS),
+
+      # ---- Force desired year order: T0 → 2022 → 2023 → 2024 → All ----
+      year = factor(
+        year,
+        levels = c("T0", "2022", "2023", "2024", "All")
+      )
+    ) %>%
+    arrange(year, treatment)
+}
+
+# ---- 2) Generic GT summary table ----
+make_treat_year_table <- function(data, var, outcome_label = NULL,
+                                  digits_mean = 2, digits_se = 2) {
+
+  var_quo <- enquo(var)
+  label   <- outcome_label %||% as_name(var_quo)
+
+  smry <- summarise_treat_year(data, !!var_quo) %>%
+    mutate(
+      summary = sprintf(paste0("%.", digits_mean, "f ± %.", digits_se, "f"),
+                        mean, se)
+    )
+
+  table_data <- smry %>%
+    select(year, treatment, summary) %>%
+    pivot_wider(names_from = treatment, values_from = summary)
+
+  gt(table_data, rowname_col = "year") %>%
+    tab_header(
+      title    = md(paste0("**", label, "**")),
+      subtitle = "Mean ± SE by year × treatment"
+    ) %>%
+    sub_missing(everything(), missing_text = "—") %>%
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_stub(rows = "All")
+    ) %>%
+    tab_options(
+      table.font.size   = px(14),
+      data_row.padding  = px(3)
+    )
+}
+
+# 3) Generic boxplot by treatment × year
+plot_treat_year_boxplot <- function(data, var,
+                                    outcome_label = NULL) {
+
+  var_quo <- enquo(var)
+  label   <- outcome_label %||% as_name(var_quo)
+
+  # Remove NAs
+  dat_plot <- data %>%
+    filter(!is.na(!!var_quo)) %>%
+    mutate(
+      treatment = factor(treatment, levels = 1:5, labels = TREAT_LABELS),
+      year      = factor(year)
+    )
+
+  p <- ggplot(dat_plot, aes(x = treatment,
+                            y = !!var_quo,
+                            fill = year)) +
+    geom_boxplot(alpha = 0.75,
+                 outlier.shape = 16,
+                 outlier.size = 1.8,
+                 width = 0.65,
+                 position = position_dodge(width = 0.8)) +
+    scale_fill_brewer(palette = "Greens") +
+    labs(
+      x     = element_blank(),
+      y     = label,
+      fill  = "Year",
+      title = paste0(label, " — Treatment comparison by year")
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      legend.position = "right",
+      plot.title      = element_text(face = "bold", size = 15),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5)
+    )
+
+  p
+}
+```
+
+### Normality Testing Function
+
+```{r Diagnostic-Check, echo=FALSE}
+check_diagnostics <- function(response_var, data) {
+  # Check if column exists
+  if (!(response_var %in% names(data))) {
+    stop(paste("Variable", response_var, "not found in data."))
+  }
+  
+  # Build formula
+  fml <- as.formula(paste(response_var, "~ treatment * year"))
+  
+  # Fit LM
+  mod <- lm(fml, data = data, na.action = na.exclude)
+  
+  # Build dataframe with aligned fitted + residuals
+  df <- data.frame(
+    resid  = residuals(mod),
+    fitted = fitted(mod),
+    treatment = data$treatment,
+    year = data$year
+  )
+  
+  # Drop rows with NA in residuals
+  df <- df[!is.na(df$resid), ]
+  
+  # Shapiro-Wilk
+  shapiro_result <- shapiro.test(df$resid)
+  cat("Shapiro-Wilk test for", response_var, "\n")
+  cat("W =", round(shapiro_result$statistic, 4),
+      "| p-value =", round(shapiro_result$p.value, 4), "\n\n")
+  
+  # Layout (6 panels)
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par))
+  par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
+  
+  # 1. QQ plot
+  car::qqPlot(df$resid,
+              main = paste("Q-Q plot:", response_var),
+              ylab = "Residuals", col = "black", pch = 19)
+  
+  # 2. Histogram
+  hist(df$resid, breaks = 30, freq = FALSE,
+       main = "Residuals", xlab = "Residuals", col = "grey")
+  lines(density(df$resid), col = "red", lwd = 2)
+  
+  # 3. Residuals vs fitted
+  plot(df$fitted, df$resid,
+       xlab = "Fitted values", ylab = "Residuals",
+       main = "Residuals vs Fitted", pch = 19)
+  abline(h = 0, lty = 2)
+  
+  # 4. Residuals by treatment
+  boxplot(resid ~ treatment, data = df,
+          main = "Residuals by Treatment",
+          xlab = "Treatment", ylab = "Residuals")
+  abline(h = 0, lty = 2)
+  
+  # 5. Residuals by year
+  boxplot(resid ~ year, data = df,
+          main = "Residuals by Year",
+          xlab = "Year", ylab = "Residuals")
+  abline(h = 0, lty = 2)
+  
+  # 6. Residuals by treatment × year
+  boxplot(resid ~ interaction(treatment, year), data = df,
+          main = "Residuals by Trt-Year",
+          xlab = "Treatment_Year", ylab = "Residuals", las = 2)
+  abline(h = 0, lty = 2)
+  
+  invisible(list(model = mod, shapiro = shapiro_result, df = df))
+}
+
+```
+
+### Estimated Means Function
+
+```{r Emmeans-Function, echo=FALSE}
+#3 Functions 
+
+# 1) Compute (2024 - T0) contrasts within each treatment
+emm_contrast_2024_minus_T0 <- function(model) {
+
+  emm_obj <- emmeans(model, ~ treatment * year)
+
+  contrast(
+    emm_obj,
+    method = "pairwise",
+    by = "treatment",
+    levels = list(year = c("T0", "2024")),
+    adjust = "tukey"
+  )
+}
+
+# 2) Treatment pairwise comparisons at BOTH T0 and 2024
+emm_pairs_T0_and_2024 <- function(model) {
+
+  emm_by_year <- emmeans(model, ~ treatment | year)
+
+  pairs(emm_by_year)
+}
+
+#{r BrayP-emmeans-2024, echo=FALSE}
+#emm_BrayP_2024 <- emmeans(BrayPmod, ~ treatment | year)
+#pairs(emm_BrayP_2024)  # treatment differences at 2024
+
+
+# 3) Compact letter display (CLD) for treatments at 2024
+emm_cld_for_2024 <- function(model) {
+
+  emm_by_year <- emmeans(model, ~ treatment | year)
+
+  emm_2024_only <- subset(emm_by_year, year == "2024")
+
+  emmeans:::cld.emmGrid(emm_2024_only, adjust = "tukey")
+}
+
+#emm_2024_CLD <- subset(emm_BrayP_2024, year == "2024")
+#cld <- emmeans:::cld.emmGrid
+#cld(emm_2024_CLD, adjust = "tukey")
+```
+
+### Plot Model With Raw Function
+
+```{r Plot-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw <- function(model, data, response_var,
+                               x = "treatment", facet_by = "year",
+                               y_label = NULL,
+                               point_alpha = 0.4, point_size = 2) {
+  
+  # If user didn't specify a label, use the column name
+  if (is.null(y_label)) {
+    y_label <- response_var
+  }
+  
+# 1. Build prediction grid
+newdat <- expand_grid(
+  treatment = unique(data$treatment),
+  year      = unique(data$year)
+)
+
+# 2. Predict with SE from fixed effects only
+p <- predict(model, newdata = newdat, se.fit = TRUE, re.form = NA)
+
+  preds <- newdat %>%
+    mutate(
+      fit   = p$fit,
+      se    = p$se.fit,
+      lower = fit - 1.96 * se,
+      upper = fit + 1.96 * se
+    )
+  
+  # 3. Raw data
+  raw <- data %>%
+    select(treatment, year, all_of(response_var)) %>%
+    rename(y = all_of(response_var))
+  
+  # 4. Plot
+  ggplot() +
+    geom_jitter(
+      data = raw,
+      aes_string(x = x, y = "y"),
+      width = 0.1, alpha = point_alpha,
+      size = point_size, color = "grey40"
+    ) +
+    geom_errorbar(
+      data = preds,
+      aes_string(x = x, ymin = "lower", ymax = "upper"),
+      width = 0.15, size = 0.7
+    ) +
+    geom_point(
+      data = preds,
+      aes_string(x = x, y = "fit"),
+      size = 3
+    ) +
+    facet_wrap(as.formula(paste("~", facet_by))) +
+    labs(
+      x = "Treatment",
+      y = y_label,
+      title = paste("Fitted Model Predictions + Raw Data for", response_var)
+    ) +
+    theme_bw(base_size = 14)
+}
+```
+
+### Plot Model With Raw Function - Thresholds
+
+```{r Thresholds-Function, echo=FALSE}
+plot_model_with_thresholds <- function(
+    model,
+    data,
+    response_var,
+    adequacy_low = NULL,
+    adequacy_high = NULL,
+    excessive = NULL,
+    y_label = NULL,
+    star_y_offset = 25,
+    raw_alpha = 0.35,
+    raw_size = 2,
+    dodge_width = 0.45,
+    y_limits = NULL,
+    y_break_by = NULL
+) {
+
+  library(tidyverse)
+  library(emmeans)
+  library(scales)
+
+  # ----------------------------
+  # 0. Build thresholds list internally
+  # ----------------------------
+  thresholds <- NULL
+
+  if (!is.null(adequacy_low) | !is.null(adequacy_high)) {
+    thresholds <- list(
+      low    = if (!is.null(adequacy_low))  c(0, adequacy_low) else NULL,
+      medium = if (!is.null(adequacy_low) & !is.null(adequacy_high))
+                  c(adequacy_low, adequacy_high) else NULL,
+      high   = if (!is.null(adequacy_high))
+                  c(adequacy_high, ifelse(is.null(excessive), Inf, excessive)) else NULL,
+      vhigh  = if (!is.null(excessive)) c(excessive, Inf) else NULL
+    )
+  }
+
+  # ----------------------------
+  # 1. Factor order + label
+  # ----------------------------
+  data <- data %>%
+    mutate(
+      year = factor(year, levels = c("T0", "2024")),
+      treatment = factor(treatment, levels = c("1","2","3","4","5"))
+    )
+
+  if (is.null(y_label)) y_label <- response_var
+
+  # ----------------------------
+  # 2. Prediction grid
+  # ----------------------------
+  newdat <- expand_grid(
+    treatment = levels(data$treatment),
+    year      = levels(data$year)
+  )
+
+  p <- predict(model, newdata = newdat, se.fit = TRUE, re.form = NA)
+
+  preds <- newdat %>%
+    mutate(
+      fit   = p$fit,
+      se    = p$se.fit,
+      lower = fit - 1.96 * se,
+      upper = fit + 1.96 * se,
+      year  = factor(year, levels = c("T0", "2024"))
+    )
+
+  # ----------------------------
+  # 3. Raw data
+  # ----------------------------
+  raw <- data %>%
+    rename(y = all_of(response_var))
+
+  # ----------------------------
+  # 4. Significance (T0 vs 2024)
+  # ----------------------------
+# ----------------------------
+# 4. Significance (T0 vs 2024)
+# ----------------------------
+emm <- emmeans(model, ~ treatment * year)
+
+cont <- contrast(emm, method = "pairwise", by = "treatment", adjust = "tukey") %>%
+  as.data.frame() %>%
+  filter(contrast %in% c("2024 - T0", "T0 - 2024")) %>%
+  mutate(
+    stars = case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01  ~ "**",
+      p.value < 0.05  ~ "*",
+      TRUE           ~ ""
+    )
+  )
+
+# ---- NEW: find max upper CI across both years ----
+star_df <- preds %>%
+  group_by(treatment) %>%
+  summarise(max_upper = max(upper, na.rm = TRUE)) %>%
+  left_join(cont %>% select(treatment, stars), by = "treatment") %>%
+  mutate(star_y = max_upper + star_y_offset)
+
+
+  # ----------------------------
+  # 5. Build plot
+  # ----------------------------
+  g <- ggplot()
+
+# --- Threshold shading ---
+if (!is.null(thresholds)) {
+
+  # Helper to clip shading to y-limits
+  clip_range <- function(x, lims) {
+    c(max(x[1], lims[1]), min(x[2], lims[2]))
+  }
+
+  # Determine visible y-range for clipping
+  lims <- if (!is.null(y_limits)) y_limits else c(-Inf, Inf)
+
+  # LOW zone
+  if (!is.null(thresholds$low)) {
+    r <- clip_range(thresholds$low, lims)
+    if (r[1] < r[2]) {
+      g <- g + annotate("rect", xmin=-Inf, xmax=Inf,
+                        ymin=r[1], ymax=r[2],
+                        fill="grey70", alpha=0.10)
+    }
+  }
+
+  # ADEQUATE zone
+  if (!is.null(thresholds$medium)) {
+    r <- clip_range(thresholds$medium, lims)
+    if (r[1] < r[2]) {
+      g <- g + annotate("rect", xmin=-Inf, xmax=Inf,
+                        ymin=r[1], ymax=r[2],
+                        fill="green4", alpha=0.15)
+    }
+  }
+
+  # HIGH zone
+  if (!is.null(thresholds$high)) {
+    r <- clip_range(thresholds$high, lims)
+    if (r[1] < r[2]) {
+      g <- g + annotate("rect", xmin=-Inf, xmax=Inf,
+                        ymin=r[1], ymax=r[2],
+                        fill="orange", alpha=0.12)
+    }
+  }
+
+  # EXCESSIVE zone
+  if (!is.null(thresholds$vhigh)) {
+    r <- clip_range(thresholds$vhigh, lims)
+    if (r[1] < r[2]) {
+      g <- g + annotate("rect", xmin=-Inf, xmax=Inf,
+                        ymin=r[1], ymax=r[2],
+                        fill="red", alpha=0.10)
+    }
+  }
+
+  # --- Threshold dashed lines (clipped to y-limits) ---
+  clip_value <- function(v, lims) v >= lims[1] & v <= lims[2]
+
+  # LOW upper boundary
+  if (!is.null(thresholds$low)) {
+    v <- thresholds$low[2]
+    if (is.null(y_limits) || clip_value(v, y_limits)) {
+      g <- g + geom_hline(yintercept = v,
+                          linetype="dashed", colour="grey30")
+    }
+  }
+
+  # ADEQUATE upper boundary
+  if (!is.null(thresholds$medium)) {
+    v <- thresholds$medium[2]
+    if (is.null(y_limits) || clip_value(v, y_limits)) {
+      g <- g + geom_hline(yintercept = v,
+                          linetype="dashed", colour="grey30")
+    }
+  }
+
+  # HIGH upper boundary
+  if (!is.null(thresholds$high)) {
+    v <- thresholds$high[2]
+    if (is.null(y_limits) || clip_value(v, y_limits)) {
+      g <- g + geom_hline(yintercept = v,
+                          linetype="dashed", colour="grey30")
+    }
+  }
+
+  # VERY HIGH lower boundary (excessive)
+  if (!is.null(thresholds$vhigh)) {
+    v <- thresholds$vhigh[1]
+    if (is.null(y_limits) || clip_value(v, y_limits)) {
+      g <- g + geom_hline(yintercept = v,
+                          linetype="dashed", colour="grey30")
+    }
+  }
+
+}  # <<< THIS closes the main `if (!is.null(thresholds))`
+
+
+  # ----------------------------
+  # Raw data (grey)
+  # ----------------------------
+  g <- g +
+    geom_point(
+      data = raw,
+      aes(x = treatment, y = y, fill = year),
+      shape = 21,
+      colour = "grey40",
+      alpha = raw_alpha,
+      size = raw_size,
+      position = position_jitterdodge(jitter.width = 0.1, dodge.width = dodge_width)
+    )
+
+  # ----------------------------
+  # Model predictions + CI
+  # ----------------------------
+  g <- g +
+    geom_errorbar(
+      data = preds,
+      aes(x = treatment, ymin = lower, ymax = upper, fill = year),
+      width = 0.12,
+      size = 0.8,
+      position = position_dodge(width = dodge_width)
+    ) +
+    geom_point(
+      data = preds,
+      aes(x = treatment, y = fit, fill = year),
+      shape = 21,
+      colour = "black",
+      size = 3,
+      stroke = 0.7,
+      position = position_dodge(width = dodge_width)
+    )
+
+  # ----------------------------
+  # Significance star
+  # ----------------------------
+  g <- g +
+    geom_text(
+      data = star_df,
+      aes(x = treatment, y = star_y, label = stars),
+      size = 9,
+      vjust = 0,
+      position = position_dodge(width = dodge_width)
+    )
+  
+  # --------------------------------------------------------
+# Add threshold legend (ONLY if thresholds exist)
+# --------------------------------------------------------
+if (!is.null(thresholds)) {
+
+  threshold_legend_df <- tibble(
+    zone = factor(
+      c("Low", "Adequate", "High", "Excessive"),
+      levels = c("Low", "Adequate", "High", "Excessive")
+    ),
+    x = 1, y = 1
+  )
+
+  g <- g +
+    geom_point(
+      data = threshold_legend_df,
+      aes(x = x, y = y, colour = zone),
+      shape = 15, size = 5, show.legend = TRUE
+    ) +
+
+    scale_colour_manual(
+      name = "Nutrient Level",
+      values = c(
+        "Low"      = "grey70",
+        "Adequate" = "green4",
+        "High"     = "orange",
+        "Excessive"= "red"
+      )
+    ) +
+
+    guides(
+      fill = guide_legend(
+        order = 1,
+        override.aes = list(colour = NA)  # year legend fix
+      ),
+      colour = guide_legend(
+        order = 2,
+        override.aes = list(alpha = 0.45, size = 6)
+      )
+)
+}
+
+# ----------------------------
+# Axis / Theme / Legend
+# ----------------------------
+if (!is.null(y_limits) && !is.null(y_break_by)) {
+
+  # User provided limits + break interval
+  g <- g +
+    scale_fill_manual(
+      name = "Year",
+      values = c("T0" = "grey60", "2024" = "black")
+    ) +
+    scale_y_continuous(
+      limits = y_limits,
+      breaks = seq(y_limits[1], y_limits[2], by = y_break_by),
+      expand = expansion(mult = c(0, 0.05))
+    )
+
+} else {
+
+  # Fallback: automatic axis (same as before)
+  g <- g +
+    scale_fill_manual(
+      name = "Year",
+      values = c("T0" = "grey60", "2024" = "black")
+    ) +
+    scale_y_continuous(
+      breaks = pretty_breaks(n = 6),
+      expand = expansion(mult = c(0, 0.05))
+    )
+}
+
+g <- g +
+  labs(
+    x = NULL,
+    y = y_label
+  ) +
+  theme_minimal(base_size = 18) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      size = 14, 
+      margin = margin(t = 10),
+      colour = "black"
+    ),
+    legend.position = "right",
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 13)
+  )
+
+
+  # ----------------------------
+#  Optional y-axis limits
+# ----------------------------
+if (!is.null(y_limits)) {
+
+  if (is.character(y_limits) && y_limits == "auto") {
+
+    # raw data range
+    raw_min <- min(raw$y, na.rm = TRUE)
+    raw_max <- max(raw$y, na.rm = TRUE)
+
+    # threshold range
+    t_min <- min(c(adequacy_low, adequacy_high, excessive), na.rm = TRUE)
+    t_max <- max(c(adequacy_low, adequacy_high, excessive), na.rm = TRUE)
+
+    # padding
+    lower <- floor(min(raw_min, t_min) * 0.9)
+    upper <- ceiling(t_max)
+
+    g <- g + coord_cartesian(ylim = c(lower, upper))
+
+  } else if (is.numeric(y_limits) && length(y_limits) == 2) {
+
+    g <- g + coord_cartesian(ylim = y_limits)
+
+  }
+}
+  
+  
+  return(g)
+}
+```
+
+------------------------------------------------------------------------
+
+# Key Figures
+
+## Forest Plot - Soil Fertility
+
+```{r ForestPlot-SoilFertility, echo=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(forcats)
+})
+
+# ----------------- Select fertility variables -----------------
+fertility_vars <- c(
+  "pH","EC", "totalN", "NH4", "BrayP","P","K","Ca","Mg","Cu","Mn","Zn"
+)
+
+indicator_labels_fert <- c(
+  pH="pH", EC="Electrical Conductivity", 
+  totalN = "Total Nitrogen", NH4 = "Ammonium Mineralization",
+  BrayP="Bray-1 Phosphorus", P="MIII Phosphorus", K="MIII Potassium", 
+  Ca="MIII Calcium", Mg="MIII Magnesium", 
+  Cu="MIII Copper", Mn="MIII Manganese", Zn="MIII Zinc"
+  )
+
+
+fertility_labels <- indicator_labels_fert[fertility_vars]
+
+summary_data_fert <- dat %>%
+  filter(year %in% c("T0","2024")) %>%
+  pivot_longer(cols = all_of(fertility_vars), names_to = "variable", values_to = "value") %>%
+  group_by(variable, treatment, year) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    sd   = sd(value, na.rm = TRUE),
+    se   = sd(value, na.rm = TRUE)/sqrt(sum(!is.na(value))),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = year, values_from = c(mean, sd, se), names_sep = "_") %>%
+  drop_na(mean_T0, mean_2024, sd_T0, se_2024)
+
+summary_scaled_fert <- summary_data_fert %>%
+  mutate(
+    scaled_change = (mean_2024 - mean_T0) / sd_T0,
+    scaled_se     = se_2024 / sd_T0
+  )
+
+# Filter summary data for fertility only
+fertility_data <- summary_scaled_fert %>%
+  filter(variable %in% fertility_vars) %>%
+  mutate(variable_label = factor(
+    indicator_labels_fert[variable],
+    levels = indicator_labels_fert[fertility_vars]
+  ))
+
+# ----------------- Create T0 grey ribbon -----------------
+# We expand each T0 mean ± SE across x range for a shaded bar
+t0_ribbons_fert <- fertility_data %>%
+  mutate(
+    xmin = (mean_T0 - se_T0) / sd_T0,
+    xmax = (mean_T0 + se_T0) / sd_T0,
+    xmin = - (se_T0 / sd_T0),
+    xmax =  (se_T0 / sd_T0)
+  ) %>%
+  select(variable_label, xmin, xmax) %>%
+  distinct()
+
+# ----------------- Fertility Forest Plot -----------------
+
+# ensure ordering
+summary_scaled_fert <- summary_scaled_fert |>
+  dplyr::mutate(treatment = factor(treatment, levels = c("1","2","3","4","5")))
+
+# legend labels (use \n if you want multi-line)
+treat_labels <- c(
+  "1" = "1: T + F",
+  "2" = "2: T + F + Cc",
+  "3" = "3: T + C + Cc",
+  "4" = "4: T + C + Cc + Gz",
+  "5" = "5: NT + C + Cc + Gz"
+  )
+
+
+p_fertility <- ggplot(fertility_data,
+    aes(x = scaled_change, y = fct_rev(variable_label))) +
+
+  # soft grey T0 CI ribbon
+  geom_rect(
+    data = t0_ribbons_fert,
+    aes(ymin = as.numeric(fct_rev(variable_label)) - 0.45,
+        ymax = as.numeric(fct_rev(variable_label)) + 0.45,
+        xmin = xmin, xmax = xmax),
+    inherit.aes = FALSE,
+    fill = "grey85", alpha = 0.65
+  ) +
+
+  # zero line
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey30", linewidth = 0.5) +
+
+  # error bars for treatment points
+  geom_errorbarh(
+    aes(xmin = scaled_change - scaled_se,
+        xmax = scaled_change + scaled_se),
+    height = 0.25, color = "grey25", linewidth = 0.7
+  ) +
+
+  geom_point(
+    aes(shape = treatment, fill = treatment),
+    size = 3.3, stroke = 0.9, color = "black"
+  ) +
+  scale_fill_grey(start = 0.15, end = 0.85,
+                  name   = "Treatment",
+                  breaks = names(treat_labels),
+                  labels = treat_labels) +
+  scale_shape_manual(values = c("1"=21,"2"=22,"3"=24,"4"=23,"5"=25),
+                     name   = "Treatment",
+                     breaks = names(treat_labels),
+                     labels = treat_labels) +
+  labs(
+    x = "Standardized Change From T0 to 2024 (Z-Score)",
+    y = NULL,
+  ) +
+
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.minor     = element_blank(),
+    panel.grid.major.y   = element_line(color = "grey90", linetype = "dashed"),
+    panel.grid.major.x   = element_line(color = "grey92"),
+    panel.border         = element_rect(color = "grey35", fill = NA),
+    axis.text.y          = element_text(size = 14),
+    axis.text.x          = element_text(size = 14, margin = margin(t=12)),
+    plot.title           = element_text(hjust = 0, face = "bold"),
+    # MORE WHITESPACE BETWEEN ROWS
+    panel.spacing.y      = unit(1.2, "lines"),
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 15, face = "bold"),
+    legend.position      = "right",
+    legend.background    = element_rect(fill = scales::alpha("white", 0.9), color = "grey70")
+  ) +
+  guides(
+    fill  = guide_legend(override.aes = list(size = 3.3)),
+    shape = guide_legend()
+  )
+
+p_fertility 
+```
+
+------------------------------------------------------------------------
+
+## Forest Plot - Soil Health
+
+```{r ForestPlot-SoilHealth, echo=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(forcats)
+})
+
+# ----------------- Select fertility variables -----------------
+health_vars <- c(
+  "SOC","POXC", "BD"
+)
+
+indicator_labels_health <- c(
+  SOC="Soil Organic Carbon", POXC="POX-C", BD="Bulk Density"
+  )
+
+
+health_labels <- indicator_labels_health[health_vars]
+
+summary_data_health <- dat %>%
+  filter(year %in% c("T0","2024")) %>%
+  pivot_longer(cols = all_of(health_vars), names_to = "variable", values_to = "value") %>%
+  group_by(variable, treatment, year) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    sd   = sd(value, na.rm = TRUE),
+    se   = sd(value, na.rm = TRUE)/sqrt(sum(!is.na(value))),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = year, values_from = c(mean, sd, se), names_sep = "_") %>%
+  drop_na(mean_T0, mean_2024, sd_T0, se_2024)
+
+summary_scaled_health <- summary_data_health %>%
+  mutate(
+    scaled_change = (mean_2024 - mean_T0) / sd_T0,
+    scaled_se     = se_2024 / sd_T0
+  )
+
+# Filter summary data for fertility only
+health_data <- summary_scaled_health %>%
+  filter(variable %in% health_vars) %>%
+  mutate(variable_label = factor(
+    indicator_labels_health[variable],
+    levels = indicator_labels_health[health_vars]
+  ))
+
+# ----------------- Create T0 grey ribbon -----------------
+# We expand each T0 mean ± SE across x range for a shaded bar
+t0_ribbons_health <- health_data %>%
+  mutate(
+    xmin = (mean_T0 - se_T0) / sd_T0 * 0,   # convert to scaled relative to T0
+    xmax = (mean_T0 + se_T0) / sd_T0 * 0,
+    # But since scaled_change is standardized change, T0 = 0.
+    # So the ribbon is simply ± (se_T0 / sd_T0)
+    xmin = - (se_T0 / sd_T0),
+    xmax =  (se_T0 / sd_T0)
+  ) %>%
+  select(variable_label, xmin, xmax) %>%
+  distinct()
+
+# ----------------- Fertility Forest Plot -----------------
+
+summary_scaled_health <- summary_scaled_health |>
+  dplyr::mutate(treatment = factor(treatment, levels = c("1","2","3","4","5")))
+
+# legend labels (use \n if you want multi-line)
+treat_labels <- c(
+  "1" = "1: T + F",
+  "2" = "2: T + F + Cc",
+  "3" = "3: T + C + Cc",
+  "4" = "4: T + C + Cc + Gz",
+  "5" = "5: NT + C + Cc + Gz"
+)
+
+
+p_health <- ggplot(health_data,
+    aes(x = scaled_change, y = fct_rev(variable_label))) +
+
+  # soft grey T0 CI ribbon
+  geom_rect(
+    data = t0_ribbons_health,
+    aes(ymin = as.numeric(fct_rev(variable_label)) - 0.45,
+        ymax = as.numeric(fct_rev(variable_label)) + 0.45,
+        xmin = xmin, xmax = xmax),
+    inherit.aes = FALSE,
+    fill = "grey85", alpha = 0.65
+  ) +
+
+  # zero line
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey30", linewidth = 0.5) +
+
+  # error bars for treatment points
+  geom_errorbarh(
+    aes(xmin = scaled_change - scaled_se,
+        xmax = scaled_change + scaled_se),
+    height = 0.25, color = "grey25", linewidth = 0.7
+  ) +
+
+  geom_point(
+    aes(shape = treatment, fill = treatment),
+    size = 3.3, stroke = 0.9, color = "black"
+  ) +
+
+  scale_fill_grey(start = 0.15, end = 0.85,
+                  name   = "Treatment",
+                  breaks = names(treat_labels),
+                  labels = treat_labels) +
+  scale_shape_manual(values = c("1"=21,"2"=22,"3"=24,"4"=23,"5"=25),
+                     name   = "Treatment",
+                     breaks = names(treat_labels),
+                     labels = treat_labels) +
+
+  labs(
+    x = "Standardized Change From T0 to 2024 (Z-Score)",
+    y = NULL,
+  ) +
+
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.minor     = element_blank(),
+    panel.grid.major.y   = element_line(color = "grey90", linetype = "dashed"),
+    panel.grid.major.x   = element_line(color = "grey92"),
+    panel.border         = element_rect(color = "grey35", fill = NA),
+    axis.text.y          = element_text(size = 14),
+    axis.text.x          = element_text(size = 14, margin = margin(t=12)),
+    plot.title           = element_text(hjust = 0, face = "bold"),
+    # MORE WHITESPACE BETWEEN ROWS
+    panel.spacing.y      = unit(1.2, "lines"),
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 15, face = "bold"),
+    legend.position      = "right",
+    legend.background    = element_rect(fill = scales::alpha("white", 0.9), color = "grey70")
+  ) +
+  guides(
+    fill  = guide_legend(override.aes = list(size = 3.3)),
+    shape = guide_legend()
+  )
+
+p_health
+```
+
+------------------------------------------------------------------------
+
+# Soil Fertility Variables
+
+------------------------------------------------------------------------
+
+## pH
+
+pH Summary
+
+```{r pH-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  pH,
+  outcome_label = "pH"
+)
+
+make_treat_year_table(
+  dat,
+  pH,
+  outcome_label = "pH",
+  digits_mean = 2, 
+  digits_se = 2
+)
+```
+
+No major spikes in the data; seems to be following some trends.
+
+Model selection: test LM first
+
+```{r pH-LM-summary, echo=FALSE}
+pHmod <- lm(pH ~ treatment * year, data = dat_2024_T0_ra, na.action=na.omit)
+summary(pHmod)
+```
+
+```{r pH-ANOVA, echo=FALSE}
+car::Anova(pHmod, type = 2)
+```
+
+Check normality - PASSES
+
+```{r pH-normality, echo=FALSE}
+check_diagnostics("pH", dat_2024_T0)
+check_diagnostics(pHmod, data = dat_2024_T0)
+```
+
+Borderline normality
+
+```{r pH-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  pHmod, 
+  dat_2024_T0, 
+  response_var = "pH",
+  y_label = "pH"
+)
+```
+
+```{r pH-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = pHmod,
+  data = dat_2024_T0,
+  response_var = "pH",
+  adequacy_low = 6.5,
+  adequacy_high = 7.5,
+  y_label = "pH",
+  star_y_offset = 5,   # <-- move closer,
+  y_limits = c(6.4, 7.5)
+)
+```
+
+```{r pH-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(pHmod)
+```
+
+```{r pH-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(pHmod)
+```
+
+Treatment 4 is 0.34 pH units higher than treatment 3 at T0 (p=0.0373).
+
+```{r pH-Emmeans-2024CLD}
+emm_cld_for_2024(pHmod)
+```
+
+------------------------------------------------------------------------
+
+## (Electrical Conductivity
+
+```{r EC-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  EC,
+  outcome_label = "Electrical Conductivity (dS/m)"
+)
+
+make_treat_year_table(
+  dat,
+  EC,
+  outcome_label = "Electrical Conductivity (dS/m)",
+  digits_mean = 2, 
+  digits_se = 2
+)
+```
+
+Data jumps all over the place - There is a V shape to Treatments 3-5 from T0 to 2024. 2022 is generally lower. Might be some issues with the sampling.
+
+```{r EC-LM-summary, echo=FALSE}
+ECmod <- lm(EC ~ treatment * year, data = dat_2024_T0)
+summary(ECmod)
+```
+
+```{r EC-ANOVA, echo=FALSE}
+car::Anova(ECmod, type=2)
+```
+
+```{r EC-Normality, echo=FALSE}
+check_diagnostics("EC", dat_2024_T0)
+```
+
+Passes normality.
+
+```{r pH-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  ECmod, 
+  dat_2024_T0, 
+  response_var = "EC",
+  y_label = "Electrical Conductivity (dS/m)"
+)
+```
+
+```{r EC-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(ECmod)
+```
+
+There is an effect for treatment 1.
+
+```{r EC-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(ECmod)
+```
+
+Marginal differences for treatment 3 and 4 compared to 1.
+
+```{r EC-Emmeans-2024CLD, echo=FALSE}
+emm_cld_for_2024(ECmod)
+```
+
+------------------------------------------------------------------------
+
+## Total Nitrogen
+
+```{r TotalN-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  totalN,
+  outcome_label = "Total Nitrogen (%)"
+)
+
+make_treat_year_table(
+  dat,
+  totalN,
+  outcome_label = "Total Nitrogen (%)"
+)
+
+```
+
+No major dips. Seems straightforward.
+
+```{r N-LM-summary, echo=FALSE}
+Nmod <- lm(totalN ~ treatment * year, data = dat_2024_T0)
+summary(Nmod)
+```
+
+```{r TotalN-ANOVA, echo=FALSE}
+car::Anova(Nmod, type = 2)
+```
+
+```{r TotalN-normality, echo=FALSE}
+check_diagnostics("totalN", dat_2024_T0)
+```
+
+Borderline parametric
+
+```{r N-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Nmod, 
+  dat_2024_T0, 
+  response_var = "totalN",
+  y_label = "Total N (%)"
+)
+```
+
+```{r TotalN-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Nmod)
+```
+
+Significant differences between 2024 and T0 for Treatments 3 and 4.
+
+```{r TotalN-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Nmod)
+```
+
+Treatment 3 is significantly different to treatments 1, 4 and 5 in 2024.
+
+```{r TotalN-Emmeans-2024CLD}
+emm_cld_for_2024(Nmod)
+```
+
+------------------------------------------------------------------------
+
+## NH4 Mineralization
+
+```{r NH4-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  NH4,
+  outcome_label = "NH4+ Mineralization (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  NH4,
+  outcome_label = "NH4 Mineralization",
+)
+```
+
+Slight issues with Treatment 5; gets high in 2022 and then reduces in 2024. Same with Treatment 3.
+
+```{r NH4-LM-summary, echo=FALSE}
+NH4mod <- lm(NH4 ~ treatment * year, data = dat_2024_T0)
+summary(NH4mod) 
+```
+
+```{r NH4-ANOVA, echo=FALSE}
+car::Anova(NH4mod, type = 2)
+```
+
+```{r NH4-normality, echo=FALSE}
+check_diagnostics("NH4", dat_2024_T0)
+```
+
+Seems fine.
+
+```{r N-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  NH4mod, 
+  dat_2024_T0, 
+  response_var = "NH4",
+  y_label = "NH4 Mineralization (ppm)"
+)
+```
+
+```{r P-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = NH4mod,
+  data = dat_2024_T0,
+  response_var = "NH4",
+  adequacy_low = 2,
+  adequacy_high = 10,
+  y_label = "NH4 Mineralization (ppm)",
+  star_y_offset = 5,   # <-- move closer,
+  y_limits = c(3,7)
+)
+
+```
+
+```{r NH4-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(NH4mod)
+```
+
+```{r NH4-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(NH4mod)
+```
+
+```{r NH4-Emmeans-2024CLD}
+emm_cld_for_2024(NH4mod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Phosphorus
+
+```{r P-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  P,
+  outcome_label = "MIII Phosphorus (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  P,
+  outcome_label = "MIII Phosphorus (ppm)",
+)
+```
+
+Seems fine; Treatment 1 has a bit of an issue though, it peaks and then falls.
+
+```{r P-LM-summary, echo=FALSE}
+Pmod <- lm(P ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Pmod)
+# use model predict function
+# predict (model)
+# predict (model, se = TRUE)$se
+```
+
+```{r P-ANOVA, echo=FALSE}
+car::Anova(Pmod, type = 2)
+```
+
+```{r P-normality, echo=FALSE}
+check_diagnostics("P", dat_2024_T0)
+```
+
+```{r P-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Pmod, 
+  dat_2024_T0, 
+  response_var = "P",
+  y_label = "MIII Phosphorus (ppm)"
+)
+```
+
+```{r P-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = Pmod,
+  data = dat_2024_T0,
+  response_var = "P",
+  adequacy_low = 28,
+  adequacy_high = 69,
+  excessive = 139,
+  y_label = "MIII P (ppm)",
+  star_y_offset = 5,   # <-- move closer,
+  y_limits = c(20, 95)
+)
+
+```
+
+```{r P-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Pmod)
+```
+
+Seems to be something happening! Treatments 3, 4, 5 all have some significant values.
+
+```{r P-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Pmod)
+```
+
+Treatment 3 seems higher than Treatment 1 at 2024.
+
+```{r P-Emmeans-2024CLD}
+emm_cld_for_2024(Pmod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Potassium
+
+```{r K-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  K,
+  outcome_label = "MIII Potassium (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  K,
+  outcome_label = "MIII Potassium (ppm)",
+)
+```
+
+Seems fine.
+
+```{r K-LM-summary, echo=FALSE}
+Kmod <- lm(K ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Kmod)
+```
+
+```{r K-ANOVA, echo=FALSE}
+car::Anova(Nmod, type = 2)
+```
+
+```{r K-normality, echo=FALSE}
+check_diagnostics("K", dat_2024_T0)
+```
+
+```{r K-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Kmod, 
+  dat_2024_T0, 
+  response_var = "K",
+  y_label = "MIII Potassium (ppm)"
+)
+
+# lm(carrot ~ 1) = NULL, gives mean carrot and SD
+```
+
+```{r K-Plot-Raw-Data-Model-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = Kmod,
+  data = dat_2024_T0,
+  response_var = "K",
+  adequacy_low = 107,
+  adequacy_high = 233,
+  excessive = 561,
+  y_label = "MIII K (ppm)",
+  y_limits = c(100,600),
+  y_break_by = 100,
+  star_y_offset = 4
+)
+```
+
+```{r K-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Kmod)
+```
+
+Treatment 3 is higher at 2024 than at T0.
+
+```{r K-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Kmod)
+```
+
+Lots happening here. Treatments 1 and 2 are lower than Treatments 3, 4, and 5.
+
+```{r K-Emmeans-2024CLD}
+emm_cld_for_2024(Kmod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Calcium
+
+```{r Ca-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  Ca,
+  outcome_label = "MIII Calcium (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  Ca,
+  outcome_label = "MIII Calcium (ppm)",
+)
+
+```
+
+Seems to spike in 2022 and then go down in 2024. Could be related to EC?
+
+```{r Ca-LM-summary, echo=FALSE}
+Camod <- lm(Ca ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Camod)
+```
+
+```{r Ca-ANOVA, echo=FALSE}
+car::Anova(Camod, type = 2)
+```
+
+```{r Ca-normality, echo=FALSE}
+check_diagnostics("Ca", dat_2024_T0)
+```
+
+Seems fine; no signs of major issues.
+
+```{r Ca-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Camod, 
+  dat_2024_T0, 
+  response_var = "Ca",
+  y_label = "MIII Calcium (ppm)"
+)
+```
+
+```{r Ca_thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = Camod,
+  data = dat_2024_T0,
+  response_var = "Ca",
+  y_label = "MIII Calcium (ppm)",
+  y_limits = c(3000, 5500),
+  star_y_offset = 2
+)
+```
+
+```{r Ca-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Camod)
+```
+
+Seems to be a signficant effect for Treatment 5.
+
+```{r Ca-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Camod)
+```
+
+No significant effects.
+
+```{r Ca-Emmeans-2024CLD}
+emm_cld_for_2024(Camod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Magnesium
+
+```{r Mg-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  Mg,
+  outcome_label = "MIII Magnesium (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  Mg,
+  outcome_label = "MIII Magnesium (ppm)",
+)
+
+```
+
+Trends seem generally linear.
+
+```{r Mg-LM-summary, echo=FALSE}
+Mgmod <- lm(Mg ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Mgmod)
+```
+
+```{r Mg-ANOVA, echo=FALSE}
+car::Anova(Mgmod, type = 2)
+```
+
+```{r Mg-normality, echo=FALSE}
+check_diagnostics("Mg", dat_2024_T0)
+```
+
+No issues.
+
+```{r Mg-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Mgmod, 
+  dat_2024_T0, 
+  response_var = "Mg",
+  y_label = "MIII Magnesium (ppm)"
+)
+```
+
+```{r Mg-Plot-Raw-Data-Model-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = Mgmod,
+  data = dat_2024_T0,
+  response_var = "Mg",
+  adequacy_low = 60,
+  adequacy_high = 300,
+  y_label = "MIII Mg (ppm)",
+  y_limits = c(100, 300)
+)
+
+```
+
+```{r Mg-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Mgmod)
+```
+
+Lots of significant effects here. Magnesium was evidently affected by the experiment.
+
+```{r Mg-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Mgmod)
+```
+
+Lots of significant pairwise comparisons in 2024.
+
+```{r Mg-Emmeans-2024CLD}
+emm_cld_for_2024(Mgmod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Copper
+
+```{r Cu-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  Cu,
+  outcome_label = "MIII Copper (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  Cu,
+  outcome_label = "MIII Copper (ppm)",
+)
+```
+
+Looks pretty linear.
+
+```{r Cu-LM-summary, echo=FALSE}
+Cumod <- lm(Cu ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Cumod)
+```
+
+```{r Cu-ANOVA, echo=FALSE}
+car::Anova(Cumod, type = 2)
+```
+
+```{r Cu-normality, echo=FALSE}
+check_diagnostics("Cu", dat_2024_T0)
+```
+
+No issues
+
+```{r Cu-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Cumod, 
+  dat_2024_T0, 
+  response_var = "Cu",
+  y_label = "MIII Copper (ppm)"
+)
+```
+
+```{r Cu-Plot-Raw-Data-Model-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = Cumod,
+  data = dat_2024_T0,
+  response_var = "Cu",
+  adequacy_low = 0.8,
+  adequacy_high = 100,
+  y_label = "MIII Copper (ppm)",
+  y_limits = c(2, 6)
+)
+```
+
+```{r Cu-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Cumod)
+```
+
+```{r Cu-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Cumod)
+```
+
+```{r Cu-Emmeans-2024CLD}
+emm_cld_for_2024(Cumod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Manganese
+
+```{r Mn-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  Mn,
+  outcome_label = "MIII Manganese (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  Mn,
+  outcome_label = "MIII Manganese (ppm)",
+)
+```
+
+Some non-linear trends
+
+```{r Mn-LM-summary, echo=FALSE}
+Mnmod <- lm(Mn ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Mnmod)
+```
+
+```{r Mn-ANOVA, echo=FALSE}
+car::Anova(Mnmod, type = 2)
+```
+
+```{r Mn-normality, echo=FALSE}
+check_diagnostics("Mn", dat_2024_T0)
+```
+
+Seems fine
+
+```{r Mn-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Mnmod, 
+  dat_2024_T0, 
+  response_var = "Mn",
+  y_label = "MIII Manganese (ppm)"
+)
+```
+
+```{r Mg-Plot-Raw-Data-Model-Thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = Mnmod,
+  data = dat_2024_T0,
+  response_var = "Mn",
+  adequacy_low = 5,
+  adequacy_high = 27,
+  y_label = "MIII Manganese (ppm)",
+  y_limits = c(20, 70),
+  star_y_offset = 2
+)
+```
+
+```{r Mn-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Mnmod)
+```
+
+Treatment effects for 1, 4. 2 slightly.
+
+```{r Mn-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Mnmod)
+```
+
+A couple pairwise interactions for 2024. Alarmingly a couple for T0 as well; Treatment 1-4, 2-4, and 3-4. 4 was high.
+
+```{r Mn-Emmeans-2024CLD}
+emm_cld_for_2024(Mnmod)
+```
+
+------------------------------------------------------------------------
+
+## MIII Zinc
+
+```{r Zn-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  Zn,
+  outcome_label = "MIII Zinc (ppm)"
+)
+
+make_treat_year_table(
+  dat,
+  Zn,
+  outcome_label = "MIII Zinc (ppm)",
+)
+```
+
+```{r Zn-LM-summary, echo=FALSE}
+Znmod <- lm(Zn ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(Znmod)
+```
+
+```{r Zn-ANOVA, echo=FALSE}
+car::Anova(Znmod, type = 2)
+```
+
+```{r Zn-normality, echo=FALSE}
+check_diagnostics("Zn", dat_2024_T0)
+```
+
+Mildly off
+
+```{r N-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  Znmod, 
+  dat_2024_T0, 
+  response_var = "Zn",
+  y_label = "MIII Zinc (ppm)"
+)
+```
+
+```{r Zn-thresholds-plot, echo=FALSE}
+plot_model_with_thresholds(
+  model = Znmod,
+  data = dat_2024_T0,
+  response_var = "Zn",
+  adequacy_low = 2.8,
+  adequacy_high = 1000,
+  y_label = "MIII Zinc (ppm)",
+  y_limits = c(10, 180),
+  star_y_offset = 2
+)
+```
+
+```{r Zn-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(Znmod)
+```
+
+Treatment effects for 1 and 5.
+
+```{r Zn-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(Znmod)
+```
+
+```{r Zn-Emmeans-2024CLD}
+emm_cld_for_2024(Znmod)
+```
+
+------------------------------------------------------------------------
+
+# Soil Health Variables
+
+## SOC
+
+```{r SOC-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  SOC,
+  outcome_label = "Soil Organic Carbon (%)"
+)
+
+make_treat_year_table(
+  dat,
+  SOC,
+  outcome_label = "Soil Organic Carbon (%)"
+)
+```
+
+```{r SOC-LM-summary, echo=FALSE}
+SOCmod <- lm(SOC ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(SOCmod)
+```
+
+```{r SOC-ANOVA, echo=FALSE}
+car::Anova(SOCmod, type = 2)
+```
+
+```{r SOC-normality, echo=FALSE}
+check_diagnostics("SOC", dat_2024_T0)
+```
+
+Seems fine
+
+```{r SOC-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  SOCmod, 
+  dat_2024_T0, 
+  response_var = "SOC",
+  y_label = "SOC (%)"
+)
+```
+
+```{r SOC-thresholds, echo=FALSE}
+plot_model_with_thresholds(
+  model = SOCmod,
+  data = dat_2024_T0,
+  response_var = "SOC",
+  y_label = "Soil Organic Carbon (%)",
+  y_limits = c(1.0, 6.0),
+  star_y_offset = 0.25
+)+
+  theme(
+    axis.text.x = element_text(size = 13, lineheight = 0.9, colour = "black" ),
+    axis.title.x = element_text(size =13),
+    axis.text.y = element_text(size = 13, colour = "black"),
+    axis.title.y = element_text(size = 14, margin = margin(r = 8)),
+    legend.position = "right",
+    plot.margin = margin(b = 15),
+  )
+
+```
+
+```{r SOC-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(SOCmod)
+```
+
+Significant effects for treatment 3 and 4.
+
+```{r SOC-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(SOCmod)
+```
+
+```{r SOC-Emmeans-2024CLD}
+emm_cld_for_2024(SOCmod)
+```
+
+------------------------------------------------------------------------
+
+## SLAKES
+
+```{r SLAKES-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  SLAKES,
+  outcome_label = "SLAKES (STAB10)"
+)
+
+make_treat_year_table(
+  dat,
+  SOC,
+  outcome_label = "SLAKES (STAB10)",
+)
+```
+
+```{r SLAKES-dataframe, echo=FALSE}
+dat_slakes <- dat %>%
+  filter(year %in% c("2022", "2023", "2024")) %>%
+  group_by(trt_rep, treatment, year) %>%
+  summarise(
+    SLAKES = mean(SLAKES, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    year      = factor(year, levels = c("2022", "2023", "2024")),
+    treatment = factor(treatment)
+  )
+```
+
+```{r LM-SLAKES, echo = FALSE}
+SLAKESmod <- lm(SLAKES ~ treatment * year, data = dat_slakes, na.action = na.omit)
+summary(SLAKESmod)
+```
+
+```{r SLAKES-diagnostics, echo=FALSE}
+check_diagnostics("SLAKES", dat_slakes)
+```
+
+```{r carrot-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  SLAKESmod, 
+  dat_slakes, 
+  response_var = "SLAKES",
+  y_label = "Aggregate Stability (STAB10)"
+)
+```
+
+```{r}
+emm_pairs_T0_and_2024(SLAKESmod)
+```
+
+```{r}
+emm_SLAKES_year <- emmeans(SLAKESmod, ~ year | treatment)  # marginal means by year
+contrast(emm_SLAKES_year, method = "pairwise", adjust = "tukey")
+```
+
+```{r}
+emm_year_by_trt_SLAKES <- emmeans(SLAKESmod, ~ year)
+
+# Pairwise year contrasts within each treatment
+pairs(emm_year_by_trt_SLAKES, adjust = "tukey")
+```
+
+------------------------------------------------------------------------
+
+## Bulk Density
+
+```{r BD-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  BD,
+  outcome_label = "Bulk Density (g/cm3)"
+)
+
+make_treat_year_table(
+  dat,
+  BD,
+  outcome_label = "Bulk Density (g/cm3)",
+)
+```
+
+Pattern shifts quite a bit depending on treatment.
+
+```{r BD-LM-summary, echo=FALSE}
+BDmod <- lm(BD ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(BDmod)
+```
+
+```{r BD-ANOVA, echo=FALSE}
+car::Anova(BDmod, type = 2)
+```
+
+```{r BD-normality, echo=FALSE}
+check_diagnostics("BD", dat_2024_T0)
+```
+
+Seems fine
+
+```{r BD-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  BDmod, 
+  dat_2024_T0, 
+  response_var = "BD",
+  y_label = "Bulk Density (g/cm3)"
+)
+```
+
+```{r BD-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(BDmod)
+```
+
+Difference for treatment 1.
+
+```{r BD-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(BDmod)
+```
+
+```{r BD-Emmeans-2024CLD}
+emm_cld_for_2024(BDmod)
+```
+
+------------------------------------------------------------------------
+
+## POX-C
+
+```{r POXC-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  POXC,
+  outcome_label = "POX-C (mg/kg)"
+)
+
+make_treat_year_table(
+  dat,
+  POXC,
+  outcome_label = "POX-C (mg/kg)",
+)
+```
+
+Non-linear; moves around a bunch.
+
+```{r POXC-LM-summary, echo=FALSE}
+POXCmod <- lm(POXC ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(POXCmod)
+```
+
+```{r POXC-ANOVA, echo=FALSE}
+car::Anova(POXCmod, type = 2)
+```
+
+```{r POXC-normality, echo=FALSE}
+check_diagnostics("POXC", dat_2024_T0)
+```
+
+Seems fine
+
+```{r POXC-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  POXCmod, 
+  dat_2024_T0, 
+  response_var = "POXC",
+  y_label = "POX-C (mg/kg)"
+)
+```
+
+```{r POXC-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(POXCmod)
+```
+
+Significant effects for most of them.
+
+```{r POXC-Emmeans-2024-Pairs, echo=FALSE}
+emm_pairs_T0_and_2024(POXCmod)
+```
+
+Some significant pairwise comparisons.
+
+```{r POXC-Emmeans-2024CLD}
+emm_cld_for_2024(POXCmod)
+```
+
+------------------------------------------------------------------------
+
+## C:N Ratio
+
+```{r CN-Summary, echo=FALSE}
+plot_treat_year_boxplot(
+  dat,
+  CN,
+  outcome_label = "C:N Ratio"
+)
+
+make_treat_year_table(
+  dat,
+  CN,
+  outcome_label = "C:N Ratio",
+)
+
+```
+
+```{r CN-LM-summary, echo=FALSE}
+CNmod <- lm(CN ~ treatment * year, data = dat_2024_T0, na.action = na.omit)
+summary(CNmod)
+
+```
+
+```{r CN-ANOVA, echo=FALSE}
+car::Anova(CNmod, type = 2)
+
+```
+
+```{r CN-normality, echo=FALSE}
+check_diagnostics("CN", dat_2024_T0)
+```
+
+```{r POXC-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  CNmod, 
+  dat_2024_T0, 
+  response_var = "CN",
+  y_label = "C:N Ratio"
+)
+
+```
+
+```{r CN-Emmeans-contrast, echo=FALSE}
+emm_contrast_2024_minus_T0(CNmod)
+
+
+```
+
+------------------------------------------------------------------------
+
+# Crop Yield Variables
+
+## Total Yield
+
+```{r TotalYield-Summary, echo=FALSE}
+# Assuming dat has: year, treatment, replicate (or bed ID), crop, totalYield
+dat_yield <- dat %>%
+  filter(year != "T0") %>%
+  group_by(year, treatment, trt_rep) %>%   # or bed / plot ID
+  summarise(
+    totalYield = sum(totalYield, na.rm = TRUE),
+    bean = sum(bean, na.rm = TRUE),
+    carrot = sum(carrot1, na.rm = TRUE),
+    kale = sum(kale, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# summary stats
+yield_summ_total <- dat_yield %>%
+  group_by(year, treatment) %>%
+  summarise(
+    mean = mean(totalYield, na.rm = TRUE),
+    se   = sd(totalYield, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# barplot
+
+greens <- RColorBrewer::brewer.pal(9, "Greens")[4:8]
+TREAT_LABELS <- c(
+  "1",
+  "2",
+  "3",
+  "4",
+  "5"
+)
+
+p_yield <- ggplot(
+  yield_summ_total,
+  aes(
+    x    = factor(year, levels = c("T0", "2022", "2023", "2024")),
+    y    = mean,
+    fill = factor(treatment, levels = 1:5, labels = TREAT_LABELS)
+  )
+) +
+  geom_col(
+    width    = 0.7,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_errorbar(
+    aes(ymin = mean - se, ymax = mean + se),
+    width     = 0.25,
+    linewidth = 0.4,
+    position  = position_dodge(width = 0.8)
+  ) +
+  scale_fill_manual(
+  values = greens,
+  name   = "Treatment"
+) +
+  labs(
+    x        = "Year",
+    y        = "Total yield (g)"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position    = "right",
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.title         = element_text(face = "bold")
+  )
+
+p_yield
+
+
+
+```
+
+```{r}
+# ---- save (edit filename/path as needed) ----
+ggsave(
+  filename = "total_yield_by_year_treatment.png",
+  plot     = p_yield,
+  width    = 7.5,
+  height   = 4.5,
+  units    = "in",
+  dpi      = 300,
+  bg       = "white"
+)
+```
+
+Linear model
+
+```{r TotalYield-2024-Check, echo=FALSE}
+dat_2024 <- dat_yield |> filter(year == "2024")
+
+yield_2024_mod <- lm(totalYield ~ treatment, data = dat_2024)
+
+car::Anova(yield_2024_mod, type = "II")
+#shapiro.test(residuals(yield_2024_mod))
+#emmeans_2024 <- emmeans(yield_2024_mod, ~ treatment)
+#pairs(emmeans_2024, adjust = "tukey")
+#cld(emmeans_2024, adjust = "tukey")
+```
+
+```{r totalYield-LM-summary, echo=FALSE}
+totalYieldmod <- lm(totalYield ~ treatment * year, data = dat_yield)
+summary(totalYieldmod)
+```
+
+```{r totalYield-ANOVA, echo=FALSE}
+car::Anova(totalYieldmod, type = 2)
+```
+
+```{r TotalYield-normality, echo=FALSE}
+check_diagnostics("totalYield", dat_yield)
+```
+
+```{r TotalYield-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  totalYieldmod, 
+  dat_yield, 
+  response_var = "totalYield",
+  y_label = "Total Yield (g)"
+)
+```
+
+```{r TotalYield-Emmeans, echo=FALSE}
+emm_totalYield <- emmeans(totalYieldmod, ~ treatment * year)
+
+#Treatment differences within each year
+pairs(emm_totalYield, by = "year", adjust = "tukey")
+```
+
+```{r TotalYield-Emmeans, echo=FALSE}
+emm_totalYield <- emmeans(totalYieldmod, ~ year)
+
+pairs(emm_totalYield, adjust = "tukey")
+```
+
+```{r Yield-Total-Year-CLD}
+emm_treat_by_year <- emmeans(totalYieldmod, ~ year)
+
+cld_totalyield <- emmeans:::cld.emmGrid(
+  emm_treat_by_year,
+  adjust  = "tukey",
+  Letters = letters
+)
+
+cld_totalyield
+```
+
+------------------------------------------------------------------------
+
+## Bean Yield
+
+```{r Bean-Summary, echo=FALSE}
+# summary stats
+yield_summ_bean <- dat_yield %>%
+  group_by(year, treatment) %>%
+  summarise(
+    mean = mean(bean, na.rm = TRUE),
+    se   = sd(bean, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# barplot
+ggplot(yield_summ_bean,
+       aes(x = treatment, y = mean, fill = year)) +
+  geom_col(position = position_dodge(width = 0.8),
+           width = 0.75) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.25,
+                position = position_dodge(width = 0.8)) +
+        scale_fill_brewer(palette = "Greens") +
+  labs(
+    title = "Bean Yield (g) — by treatment and year",
+    x = "Treatment",
+    y = "Total Yield (g) (mean ± SE)"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r bean-LM-summary, echo=FALSE}
+beanmod <- lm(bean ~ treatment * year, data = dat_yield)
+summary(beanmod)
+```
+
+```{r bean-ANOVA, echo=FALSE}
+car::Anova(beanmod, type = 2)
+```
+
+```{r TotalYield-normality, echo=FALSE}
+check_diagnostics("bean", dat_yield)
+```
+
+Seems fine
+
+```{r TotalYield-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  beanmod, 
+  dat_yield, 
+  response_var = "bean",
+  y_label = "Bean Yield (g)"
+)
+```
+
+```{r bean-Emmeans, echo=FALSE}
+emm_bean <- emmeans(beanmod, ~ treatment * year)
+
+#Treatment differences within each year
+pairs(emm_bean, by = "year", adjust = "tukey")
+```
+
+```{r Bean-Total-Year-CLD}
+emm_bean_by_year <- emmeans(beanmod, ~ treatment | year)
+
+cld_bean <- emmeans:::cld.emmGrid(
+  emm_bean_by_year,
+  adjust  = "tukey",
+  Letters = letters
+)
+
+cld_bean
+```
+
+------------------------------------------------------------------------
+
+## Carrot Yield
+
+```{r Carrot-Summary, echo=FALSE}
+# summary stats
+yield_summ_carrot <- dat_yield %>%
+  group_by(year, treatment) %>%
+  summarise(
+    mean = mean(carrot, na.rm = TRUE),
+    se   = sd(carrot, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# barplot
+ggplot(yield_summ_carrot,
+       aes(x = treatment, y = mean, fill = year)) +
+  geom_col(position = position_dodge(width = 0.8),
+           width = 0.75) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.25,
+                position = position_dodge(width = 0.8)) +
+        scale_fill_brewer(palette = "Greens") +
+  labs(
+    title = "Carrot Yield (g) — by treatment and year",
+    x = "Treatment",
+    y = "Total Yield (g) (mean ± SE)"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r carrot-LM-summary, echo=FALSE}
+carrotmod <- lm(carrot ~ treatment * year, data = dat_yield)
+summary(carrotmod)
+```
+
+```{r carrot-ANOVA, echo=FALSE}
+car::Anova(carrotmod, type = 2)
+```
+
+```{r carrot-normality, echo=FALSE}
+check_diagnostics("carrot", dat_yield)
+```
+
+Seems fine
+
+```{r carrot-Model-With-Raw, echo=FALSE}
+plot_pred_with_raw(
+  carrotmod, 
+  dat_yield, 
+  response_var = "carrot",
+  y_label = "Carrot Yield (g)"
+)
+```
+
+```{r carrot-Emmeans, echo=FALSE}
+emm_carrot <- emmeans(carrotmod, ~ treatment * year)
+
+#Treatment differences within each year
+pairs(emm_carrot, by = "year", adjust = "tukey")
+
+```
+
+There is one significant difference in 2024; carrot yield is lower in treatment 4 than treatment 2.
+
+```{r carrot-Total-Year-CLD}
+emm_carrot_by_year <- emmeans(carrotmod, ~ treatment | year)
+
+cld_carrot <- emmeans:::cld.emmGrid(
+  emm_carrot_by_year,
+  adjust  = "tukey",
+  Letters = letters
+)
+
+cld_carrot
+```
+
+```{r Carrot-2024-Check, echo=FALSE}
+carrot_2024_mod <- lm(carrot ~ treatment, data = dat_2024)
+car::Anova(carrot_2024_mod, type = "II")
+emmeans_2024 <- emmeans(yield_2024_mod, ~ treatment)
+pairs(emmeans_2024, adjust = "tukey")
+#cld(emmeans_2024, adjust = "tukey")
+```
+
+## Kale Yield
+
+```{r Kale-Summary, echo=FALSE}
+# summary stats
+yield_summ_kale <- dat_yield %>%
+  group_by(year, treatment) %>%
+  summarise(
+    mean = mean(kale, na.rm = TRUE),
+    se   = sd(kale, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# barplot
+ggplot(yield_summ_kale,
+       aes(x = treatment, y = mean, fill = year)) +
+  geom_col(position = position_dodge(width = 0.8),
+           width = 0.75) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.25,
+                position = position_dodge(width = 0.8)) +
+        scale_fill_brewer(palette = "Greens") +
+  labs(
+    title = "Kale Yield (g) — by treatment and year",
+    x = "Treatment",
+    y = "Total Yield (g) (mean ± SE)"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+```{r kale-LM-summary, echo=FALSE}
+kalemod <- lm(kale ~ treatment * year, data = dat_kale)
+summary(kalemod)
+
+```
+
+```{r kale-ANOVA, echo=FALSE}
+car::Anova(kalemod, type = 2)
+```
+
+```{r kale-normality, echo=FALSE}
+check_diagnostics(kalemod, dat_kale)
+```
+
+Not normally distributed.
