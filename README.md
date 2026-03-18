@@ -2,18 +2,20 @@ This readme file was generated on 2026-03-18 by Matthew Kyriakides
 
 --------------------
 
-**Quick Start:**
+# Quick Start
 
-    Place the Excel data file in data/ using the expected filename and sheet names.
+1. Place the Excel data file in `data/` using the expected filename and sheet names.
 
-1. Open "Chapter 2 - Soil-Yields.Rproj" in RStudio
+2. Open `Chapter 2 - Soil-Yields.Rproj` in RStudio
 
-2. Run scripts/run_all.R - outputs (models, figures, summaries) will appear in outputs/
+3. Run `scripts/run_all.R` - outputs (models, figures, summaries) will appear in `outputs/`
    Note: the raw data file is not included in this repository. Contact the author for access.
-   
-   --------------------
 
-3. Title of Dataset: Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data) 
+--------------------
+
+# General Information
+
+1. Title of Dataset: Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data) 
    
    
 
@@ -66,7 +68,7 @@ SHARING/ACCESS INFORMATION
 5. Was data derived from another source? no
     A. If yes, list source(s):
 
-6. Recommended citation for this dataset: Kyriakides, M. (2026). *Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data)*. University of Victoria, Ecogastronomy Research Group. https://doi.org/[insert-DOI]
+6. Recommended citation for this dataset: Kyriakides, M. (2026). *Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data)*. University of Victoria, Ecogastronomy Research Group. 
 
 -------------------------
 
