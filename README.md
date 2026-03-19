@@ -65,10 +65,9 @@ SHARING/ACCESS INFORMATION
 
 4. Links/relationships to ancillary data sets: No
 
-5. Was data derived from another source? no
-    A. If yes, list source(s):
+5. Was data derived from another source? No
 
-6. Recommended citation for this dataset: Kyriakides, M. (2026). *Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data)*. University of Victoria, Ecogastronomy Research Group. 
+6. Recommended citation for this dataset: Kyriakides, M. (2026). *Sustaining Yields and Increasing Soil Carbon in Reduced-Input Systems: Evidence from a Three-Year Agricultural Reclamation Trial (Data)*. University of Victoria, Ecogastronomy Research Group (Title is provisional)
 
 -------------------------
 
@@ -81,19 +80,19 @@ DATA & FILE OVERVIEW
       
           Yield-Soil-Trial/
           │
-          ├── Chapter 2 - Soil.Rproj         # RStudio project (open this)
-          ├── README.md                       # Project documentation
-          ├── .Rprofile                       # auto-activates renv
-          ├── renv.lock                       # reproducible package versions
+          ├── Chapter 2 - Soil.Rproj                # RStudio project (open this)
+          ├── README.md                             # Project documentation
+          ├── .Rprofile                             # auto-activates renv
+          ├── renv.lock                             # reproducible package versions
           │
-          ├── data/                           # input data (not included — private)
-          ├── outputs/                        # all generated tables, figures, logs
-          │   ├── AIC/                        # AIC model rankings and candidate models
-          │   ├── Data Summaries/             # mean ± SE summaries by year and treatment
-          │   ├── Model Summaries/            # LM outputs and emmeans contrasts (Excel)
-          │   ├── Model with Raw Outputs/     # model prediction plots with raw data
-          │   ├── Residual Diagnostics/       # QQ plots, histograms, Shapiro-Wilk results
-          │   └── Final Figures/              # publication-ready figures
+          ├── data/                                 # input data (not included — private)
+          ├── outputs/                              # all generated tables, figures, logs
+          │   ├── AIC/                              # AIC model rankings and candidate models
+          │   ├── Data Summaries/                   # mean ± SE summaries by year and treatment
+          │   ├── Model Summaries/                  # LM outputs and emmeans contrasts (Excel)
+          │   ├── Model with Raw Outputs/           # model prediction plots with raw data
+          │   ├── Residual Diagnostics/             # QQ plots, histograms, Shapiro-Wilk results
+          │   └── Final Figures/                    # publication-ready figures
           │       ├── Balanced Model Verification/  # balanced vs raw sensitivity figures
           │       ├── Fertility Threshold Plots/    # macro and micronutrient threshold figures
           │       ├── Forest Plots/                 # standardized change forest plots
@@ -104,9 +103,9 @@ DATA & FILE OVERVIEW
           │           ├── Soil Models (Balanced)/   # soil indicators, balanced dataset
           │           ├── Soil Models (Full)/       # soil indicators, raw dataset
           │           └── Yield Models/             # crop yield models (Years 1-3)
-          └── scripts/                        # all analysis code
-              ├── run_all.R                   # master pipeline runner
-              ├── utils.R                     # shared data objects and helper functions
+          └── scripts/                              # all analysis code
+              ├── run_all.R                         # master pipeline runner
+              ├── utils.R                           # shared data objects and helper functions
               ├── 01_Load_Clean.R
               ├── 02_Summaries.R
               ├── 03_Models_Soil.R

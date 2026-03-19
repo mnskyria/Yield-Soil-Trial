@@ -135,7 +135,7 @@ combined_plot_macro
 
 # ----------------- 3. EXPORT -----------------
 ggsave(
-  "threshold_macro.jpg",
+  "threshold_macro.png",
   plot   = combined_plot_macro,
   path   = file.path(CONFIG$figs_dir, "Fertility Threshold Plots"),
   width  = 7.5,
@@ -143,4 +143,3 @@ ggsave(
   units  = "in",
   dpi    = 1200
 )
-

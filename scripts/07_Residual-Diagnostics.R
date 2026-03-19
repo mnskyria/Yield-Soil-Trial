@@ -2,104 +2,17 @@
 # 07_Residual-Diagnostics.R
 # ============================================================
 
-# ----------------- 1. CORE DIAGNOSTIC FUNCTION -----------------
-run_diagnostics_single <- function(response_var,
-                                   data,
-                                   fig_dir  = "diagnostics_figs",
-                                   width    = 10,
-                                   height   = 6,
-                                   dpi      = 300,
-                                   formula  = NULL) {
-  
-  if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
-  
-  if (!(response_var %in% names(data))) {
-    stop(paste("Variable", response_var, "not found in data."))
-  }
-  
-  if (is.null(formula)) {
-    fml <- as.formula(paste(response_var, "~ treatment * year"))
-  } else {
-    fml <- formula
-  }
-  
-  mod <- lm(fml, data = data, na.action = na.exclude)
-  
-  # ── Use model.frame to get exactly the rows the model used ──
-  mf <- model.frame(mod)
-  
-  df <- data.frame(
-    resid     = residuals(mod)[!is.na(residuals(mod))],
-    fitted    = fitted(mod)[!is.na(fitted(mod))],
-    treatment = factor(data$treatment[as.integer(rownames(mf))]),
-    year      = factor(data$year[as.integer(rownames(mf))])
+# ----------------- 1. YEAR RECODE HELPER -----------------
+recode_years <- function(data, levels, labels) {
+  data$year <- factor(
+    as.character(droplevels(factor(as.character(data$year)))),
+    levels = levels,
+    labels = labels
   )
-  
-  sh <- shapiro.test(df$resid)
-  cat("Shapiro for", response_var, "| W =", round(sh$statistic, 4),
-      "p =", round(sh$p.value, 4), "\n")
-  
-  outfile <- file.path(fig_dir, paste0("diagnostics_", response_var, ".png"))
-  png(outfile, width = width, height = height, units = "in", res = dpi)
-  
-  par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
-  
-  car::qqPlot(df$resid,
-              main = paste("Q-Q plot:", response_var),
-              ylab = "Residuals", col = "black", pch = 19)
-  
-  hist(df$resid, breaks = 30, freq = FALSE,
-       main = "Residuals", xlab = "Residuals", col = "grey")
-  lines(density(df$resid), col = "red", lwd = 2)
-  
-  plot(df$fitted, df$resid,
-       xlab = "Fitted values", ylab = "Residuals",
-       main = "Residuals vs Fitted", pch = 19)
-  abline(h = 0, lty = 2)
-  
-  boxplot(resid ~ treatment, data = df,
-          main = "Residuals by Treatment",
-          xlab = "Treatment", ylab = "Residuals")
-  abline(h = 0, lty = 2)
-  
-  boxplot(resid ~ year, data = df,
-          main = "Residuals by Year",
-          xlab = "Year", ylab = "Residuals")
-  abline(h = 0, lty = 2)
-  
-  boxplot(resid ~ interaction(treatment, year), data = df,
-          main = "Residuals by Trt-Year",
-          xlab = "", ylab = "Residuals", las = 2)
-  abline(h = 0, lty = 2)
-  
-  dev.off()
-  
-  invisible(list(model = mod, shapiro = sh, df = df, file = outfile))
+  data
 }
 
-# ----------------- 2. BATCH RUNNER -----------------
-run_all_diagnostics <- function(vars, data, fig_dir,
-                                width = 10, height = 6, dpi = 300) {
-  results <- list()
-  for (v in vars) {
-    message("Running diagnostics: ", v)
-    tryCatch({
-      results[[v]] <- run_diagnostics_single(
-        response_var = v,
-        data         = data,
-        fig_dir      = fig_dir,
-        width        = width,
-        height       = height,
-        dpi          = dpi
-      )
-    }, error = function(e) {
-      message("  ✗ Error for ", v, ": ", e$message)
-    })
-  }
-  invisible(results)
-}
-
-# ----------------- 3. SHAPIRO EXCEL WRITER -----------------
+# ----------------- 2. SHAPIRO EXCEL WRITER -----------------
 write_shapiro_excel <- function(results, outfile) {
   wb <- createWorkbook()
   addWorksheet(wb, "Shapiro")
@@ -116,86 +29,119 @@ write_shapiro_excel <- function(results, outfile) {
   message("✓ Shapiro results saved: ", outfile)
 }
 
+# ----------------- 3. WRAPPER -----------------
+run_all_diagnostics <- function(vars, data, formula_list = NULL,
+                                fig_dir, width = 10, height = 6, dpi = 300) {
+  
+  dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+  results <- list()
+  
+  for (v in vars) {
+    message("Running diagnostics: ", v)
+    tryCatch({
+      
+      if (!is.null(formula_list) && v %in% names(formula_list)) {
+        fml <- formula_list[[v]]
+      } else {
+        fml <- as.formula(paste(v, "~ treatment * year"))
+      }
+      
+      mod <- lm(fml, data = data, na.action = na.omit)
+      outfile <- file.path(fig_dir, paste0("diagnostics_", v, ".png"))
+      png(outfile, width = width, height = height, units = "in", res = dpi)
+      results[[v]] <- check_diagnostics(mod, data = data)
+      dev.off()
+      message("  ✓ ", v)
+      
+    }, error = function(e) {
+      message("  ✗ Error for ", v, ": ", e$message)
+      try(dev.off(), silent = TRUE)
+    })
+  }
+  
+  invisible(results)
+}
+
 # ----------------- 4. RUN MODEL DIAGNOSTICS -----------------
-# --- Soil fertility & condition: treatment * year (balanced) ---
+
+# --- Soil: balanced (T0 + Year 3) ---
 diag_soil <- run_all_diagnostics(
   vars    = soil_vars,
-  data    = dat_2024_T0,
+  data    = recode_years(dat_2024_T0,
+                         c("T0", "2024"),
+                         c("T0", "Year 3")),
   fig_dir = file.path(CONFIG$diag_dir, "Soil Models (Balanced)")
 )
-
 write_shapiro_excel(
   diag_soil,
-  outfile = file.path(CONFIG$diag_dir, "Soil Models (Balanced)",
-                      "shapiro_soil_balanced.xlsx")
+  file.path(CONFIG$diag_dir, "Soil Models (Balanced)",
+            "shapiro_soil_balanced.xlsx")
 )
 
-# --- Soil fertility & condition: treatment * year (raw) ---
+# --- Soil: raw (T0 + Year 3 unaveraged) ---
 diag_soil_raw <- run_all_diagnostics(
   vars    = soil_vars,
-  data    = dat_RAW,
+  data    = recode_years(dat_RAW,
+                         c("T0", "2024"),
+                         c("T0", "Year 3")),
   fig_dir = file.path(CONFIG$diag_dir, "Soil Models (Raw)")
 )
-
 write_shapiro_excel(
   diag_soil_raw,
-  outfile = file.path(CONFIG$diag_dir, "Soil Models (Raw)",
-                      "shapiro_soil_raw.xlsx")
+  file.path(CONFIG$diag_dir, "Soil Models (Raw)",
+            "shapiro_soil_raw.xlsx")
 )
 
-# --- Aggregate stability: treatment * year (Years 1-3) ---
+# --- Aggregate stability: Years 1-3 ---
 diag_slakes <- run_all_diagnostics(
   vars    = "SLAKES",
-  data    = dat_slakes,
+  data    = recode_years(dat_slakes,
+                         c("2022", "2023", "2024"),
+                         c("Year 1", "Year 2", "Year 3")),
   fig_dir = file.path(CONFIG$diag_dir, "Slakes Model")
 )
-
 write_shapiro_excel(
   diag_slakes,
-  outfile = file.path(CONFIG$diag_dir, "Slakes Model",
-                      "shapiro_slakes.xlsx")
+  file.path(CONFIG$diag_dir, "Slakes Model", "shapiro_slakes.xlsx")
 )
 
-# --- Crop yield: treatment * year (Years 1-3) ---
+# --- Crop yield: Years 1-3 (kale excluded) ---
 diag_yield <- run_all_diagnostics(
-  vars    = c("totalYield", "bean", "carrot"),  # kale excluded
-  data    = dat_yield,
+  vars    = c("totalYield", "bean", "carrot"),
+  data    = recode_years(dat_yield,
+                         c("2022", "2023", "2024"),
+                         c("Year 1", "Year 2", "Year 3")),
   fig_dir = file.path(CONFIG$diag_dir, "Yield Models")
 )
-
 write_shapiro_excel(
   diag_yield,
-  outfile = file.path(CONFIG$diag_dir, "Yield Models",
-                      "shapiro_yield.xlsx")
+  file.path(CONFIG$diag_dir, "Yield Models", "shapiro_yield.xlsx")
 )
 
-# --- Kale yield: treatment * year (Years 2-3 only) ---
+# --- Kale yield: Years 2-3 only ---
 diag_kale <- run_all_diagnostics(
   vars    = "kale",
-  data    = dat_kale,
+  data    = recode_years(dat_kale,
+                         c("2023", "2024"),
+                         c("Year 2", "Year 3")),
   fig_dir = file.path(CONFIG$diag_dir, "Kale Model")
 )
-
 write_shapiro_excel(
   diag_kale,
-  outfile = file.path(CONFIG$diag_dir, "Kale Model",
-                      "shapiro_kale.xlsx")
+  file.path(CONFIG$diag_dir, "Kale Model", "shapiro_kale.xlsx")
 )
 
-# --- AIC candidate models: bean ~ NH4 ---
-diag_bean_nh4 <- run_diagnostics_single(
-  response_var = "bean",
-  data         = dat_yearly_means,
-  fig_dir      = file.path(CONFIG$diag_dir, "AIC Model"),
-  formula      = bean ~ NH4 + year
-)
-
-# --- AIC candidate models: carrot ~ Mg ---
-diag_carrot_mg <- run_diagnostics_single(
-  response_var = "carrot1",
-  data         = dat_yearly_means,
-  fig_dir      = file.path(CONFIG$diag_dir, "AIC Model"),
-  formula      = carrot1 ~ Mg + year
+# --- AIC candidate models (custom formulas) ---
+diag_aic <- run_all_diagnostics(
+  vars         = c("bean", "carrot1"),
+  data         = recode_years(dat_yearly_means,
+                              c("2022", "2023", "2024"),
+                              c("Year 1", "Year 2", "Year 3")),
+  formula_list = list(
+    bean    = bean ~ NH4 + year,
+    carrot1 = carrot1 ~ Mg + year
+  ),
+  fig_dir = file.path(CONFIG$diag_dir, "AIC Model")
 )
 
 message("\n✓ All diagnostics complete.")
