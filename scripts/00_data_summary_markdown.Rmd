@@ -1121,7 +1121,7 @@ No major spikes in the data; seems to be following some trends.
 Model selection: test LM first
 
 ```{r pH-LM-summary, echo=FALSE}
-pHmod <- lm(pH ~ treatment * year, data = dat_2024_T0_ra, na.action=na.omit)
+pHmod <- lm(pH ~ treatment * year, data = dat_2024_T0, na.action=na.omit)
 summary(pHmod)
 ```
 
@@ -1132,8 +1132,7 @@ car::Anova(pHmod, type = 2)
 Check normality - PASSES
 
 ```{r pH-normality, echo=FALSE}
-check_diagnostics("pH", dat_2024_T0)
-check_diagnostics(pHmod, data = dat_2024_T0)
+check_diagnostics(pHmod, dat_2024_T0)
 ```
 
 Borderline normality

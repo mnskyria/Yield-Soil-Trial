@@ -192,13 +192,19 @@ run_lm_plots(
 aic_out_dir <- file.path(CONFIG$figs_dir, "LM Outputs", "AIC Models")
 if (!dir.exists(aic_out_dir)) dir.create(aic_out_dir, recursive = TRUE)
 
-# --- Bean ~ NH4 (Years 1 and 3; Year 2 missing NH4) ---
+# --- Bean ~ NH4 (Years 1 and 3) ---
+dat_bean_aic <- recode_years(
+  dat_yearly_means,
+  c("2022", "2023", "2024"),
+  c("Year 1", "Year 2", "Year 3")
+)
+
 beanNH4mod <- lm(bean ~ NH4 + year,
-                 data = dat_yearly_means, na.action = na.omit)
+                 data = dat_bean_aic, na.action = na.omit)
 
 beanNH4plot <- plot_pred_with_raw_indicator(
   beanNH4mod,
-  dat_yearly_means,
+  dat_bean_aic,
   response_var  = "bean",
   indicator_var = "NH4",
   x_label       = "NH₄⁺ Mineralization (ppm)",
@@ -211,13 +217,19 @@ ggsave(
   width    = 7, height = 4, dpi = 300, units = "in"
 )
 
-# --- Carrot ~ Mg (Years 1 and 3; Year 2 missing Mg) ---
+# --- Carrot ~ Mg (Years 1 and 3) ---
+dat_carrot_aic <- recode_years(
+  dat_yearly_means,
+  c("2022", "2023", "2024"),
+  c("Year 1", "Year 2", "Year 3")
+)
+
 carrotMgmod <- lm(carrot1 ~ Mg + year,
-                  data = dat_yearly_means, na.action = na.omit)
+                  data = dat_carrot_aic, na.action = na.omit)
 
 carrotMgplot <- plot_pred_with_raw_indicator(
   carrotMgmod,
-  dat_yearly_means,
+  dat_carrot_aic,
   response_var  = "carrot1",
   indicator_var = "Mg",
   x_label       = "MIII Magnesium (ppm)",
@@ -229,5 +241,4 @@ ggsave(
   plot     = carrotMgplot,
   width    = 7, height = 4, dpi = 300, units = "in"
 )
-
 message("\n✓ All model output figures complete.")

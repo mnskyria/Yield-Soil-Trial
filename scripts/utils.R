@@ -326,7 +326,7 @@ plot_model_with_thresholds <- function(
     y_break_by = NULL
 ) {
   
-# Build thresholds list internally
+  # Build thresholds list internally
   thresholds <- NULL
   
   if (!is.null(adequacy_low) | !is.null(adequacy_high)) {
@@ -340,8 +340,8 @@ plot_model_with_thresholds <- function(
     )
   }
   
-
-# 1. Factor order + label
+  
+  # 1. Factor order + label
   data <- data %>%
     mutate(
       year = factor(year, levels = c("T0", "2024")),
@@ -350,7 +350,7 @@ plot_model_with_thresholds <- function(
   
   if (is.null(y_label)) y_label <- response_var
   
-# 2. Prediction grid
+  # 2. Prediction grid
   newdat <- expand_grid(
     treatment = levels(data$treatment),
     year      = levels(data$year)
@@ -367,11 +367,11 @@ plot_model_with_thresholds <- function(
       year  = factor(year, levels = c("T0", "2024"))
     )
   
-# 3. Raw data
+  # 3. Raw data
   raw <- data %>%
     rename(y = all_of(response_var))
-
-# 4. Significance (T0 vs 2024)
+  
+  # 4. Significance (T0 vs 2024)
   emm <- emmeans(model, ~ treatment * year)
   
   cont <- contrast(emm, method = "pairwise", by = "treatment", adjust = "tukey") %>%
@@ -386,7 +386,7 @@ plot_model_with_thresholds <- function(
       )
     )
   
- # find max upper CI across both years
+  # find max upper CI across both years
   star_df <- preds %>%
     group_by(treatment) %>%
     summarise(max_upper = max(upper, na.rm = TRUE)) %>%
@@ -394,9 +394,9 @@ plot_model_with_thresholds <- function(
     mutate(star_y = max_upper + star_y_offset)
   
   
-
-# 5. Build plot
-
+  
+  # 5. Build plot
+  
   g <- ggplot()
   
   # --- Threshold shading ---
@@ -489,9 +489,9 @@ plot_model_with_thresholds <- function(
       }
     }
   }
-    
-# Raw data (grey)
-
+  
+  # Raw data (grey)
+  
   g <- g +
     geom_point(
       data = raw,
@@ -503,8 +503,8 @@ plot_model_with_thresholds <- function(
       position = position_jitterdodge(jitter.width = 0.1, dodge.width = dodge_width)
     )
   
-# Model predictions + CI
-
+  # Model predictions + CI
+  
   g <- g +
     geom_errorbar(
       data = preds,
@@ -523,7 +523,7 @@ plot_model_with_thresholds <- function(
       position = position_dodge(width = dodge_width)
     )
   
-# Significance star
+  # Significance star
   g <- g +
     geom_text(
       data = star_df,
@@ -533,8 +533,8 @@ plot_model_with_thresholds <- function(
       position = position_dodge(width = dodge_width)
     )
   
-# Add threshold legend
-
+  # Add threshold legend
+  
   if (!is.null(thresholds)) {
     
     threshold_legend_df <- tibble(
@@ -574,7 +574,7 @@ plot_model_with_thresholds <- function(
       )
   }
   
-# Axis / Theme / Legend
+  # Axis / Theme / Legend
   if (!is.null(y_limits) && !is.null(y_break_by)) {
     
     # User provided limits + break interval
@@ -592,7 +592,7 @@ plot_model_with_thresholds <- function(
     
   } else {
     
-# Fallback: automatic axis (same as before)
+    # Fallback: automatic axis (same as before)
     g <- g +
       scale_fill_manual(
         name = "Year",
@@ -623,8 +623,8 @@ plot_model_with_thresholds <- function(
       legend.title = element_text(size = 14),
       legend.text = element_text(size = 13)
     )
-
-#  Optional y-axis limits
+  
+  #  Optional y-axis limits
   if (!is.null(y_limits)) {
     
     if (is.character(y_limits) && y_limits == "auto") {
@@ -652,5 +652,4 @@ plot_model_with_thresholds <- function(
   
   
   return(g)
-  }
-
+}
