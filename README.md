@@ -1,9 +1,6 @@
----
+------------------------------------------------------------------------
 
-editor_options: 
-  markdown: 
-    wrap: 72
----
+editor_options: markdown: wrap: 72 ---
 
 This readme file was generated on 2026-03-18 by Matthew Kyriakides
 
@@ -169,7 +166,7 @@ This readme file was generated on 2026-03-18 by Matthew Kyriakides
 
 1.  **Description of methods used for collection/generation of data:** Field data were collected from 2022 to 2024 at the Sandown Centre for Regenerative Agriculture (North Saanich, BC, Canada) on former racetrack soils under reclamation. Five management treatments were established along an input-systems (I-S) continuum, replicated four times (n = 20 plots). Each treatment included carrot (*Daucus carota*), kale (*Brassica oleracea*), and bush bean (*Phaseolus vulgaris*) as functional indicator crops. Soils were sampled at 0–15 cm depth. Soil fertility (pH, EC, macro- and micronutrients) and condition (bulk density, aggregate stability, SOC, POX-C) indicators were analyzed at the Pacific Forestry Centre Chemistry Services Laboratory and the UVic Soil Laboratory. Field management operations, dates, and conditions were recorded in logbooks and transferred to digital records. See dissertation Chapter 2 for full methods.
 
-2.  **Methods for processing the data:** Raw laboratory results were collated in Microsoft Excel, then cleaned and standardized in R (v4.5.1) using the `tidyverse` package. Factor levels for `treatment`, `year`, and `replicate` were explicitly set to preserve experimental structure. Missing data were coded as `"na"` and converted to `NA` during import. Analyses used linear models (LMs) with treatment and year as fixed effects (`lm()`). Because T0 (n = 20) and Year 3 (n = 60) differed in sample size, Year 3 observations were averaged within treatment replicates to generate a balanced dataset (n = 40) for T0–Year 3 comparisons, treating the bed as the primary experimental unit. Sensitivity analyses comparing balanced and raw datasets are provided in `outputs/Final Figures/Balanced Model Verification/`. Estimated marginal means and pairwise contrasts were generated via `emmeans` with Tukey adjustment. AIC-based model selection used a pre-specified candidate set approach (`MuMIn`). Residual diagnostics used visual inspection and Shapiro-Wilk tests. See dissertation Chapter 2 for full statistical methods. \
+2.  **Methods for processing the data:** Raw laboratory results were collated in Microsoft Excel, then cleaned and standardized in R (v4.5.1) using the `tidyverse` package. Factor levels for `treatment`, `year`, and `replicate` were explicitly set to preserve experimental structure. Missing data were coded as `"na"` and converted to `NA` during import. Analyses used linear models (LMs) with treatment and year as fixed effects (`lm()`). Because T0 (n = 20) and Year 3 (n = 60) differed in sample size, Year 3 observations were averaged within treatment replicates to generate a balanced dataset (n = 40) for T0–Year 3 comparisons, treating the bed as the primary experimental unit. Sensitivity analyses comparing balanced and raw datasets are provided in `outputs/Final Figures/Balanced Model Verification/`. Estimated marginal means and pairwise contrasts were generated via `emmeans` with Tukey adjustment. AIC-based model selection used a pre-specified candidate set approach (`MuMIn`). Residual diagnostics used visual inspection and Shapiro-Wilk tests. See dissertation Chapter 2 for full statistical methods.\
     \
     OpenAI's ChatGPT (GPT-4 and 5) and Anthropic’s Claude (Sonnet 4.6) were used to support statistical analysis and editorial feedback during manuscript preparation (accessed June 2025 to May 2026).
 
@@ -183,10 +180,10 @@ This readme file was generated on 2026-03-18 by Matthew Kyriakides
 
 7.  **People involved with sample collection, processing, analysis and/or submission:** Multiple individuals contributed to field and laboratory work:
 
-    - **T0 (2022 baseline):** Matthew Kyriakides, Dr. Charlotte Norris (bulk soil); John Kang and Reid Lukaitis (bulk density & water). Reid completed pH and bulk density; field capacity by unknown staff.\
-    - **2022:** Matthew Kyriakides, Dr. Charlotte Norris, Camille Giuliano, Reid Lukaitis. Camille completed pH, bulk density, and SLAKES; field capacity by unknown staff.\
-    - **2023:** Matthew Kyriakides, Dr. Charlotte Norris, Camille Giuliano, Nickolas Lee. SLAKES by Matthew, Camille, and Nick; pH and BD jointly by Matthew, Teale Weiss-Gibbons, and Sarah Rebbitt; field capacity by unknown staff.\
-    - **2024:** Matthew Kyriakides, Dr. Charlotte Norris, Audrey McPherson, Teale Weiss-Gibbons. SLAKES by Matthew (UVic Soil Lab); pH by Lily Beveridge (UVic Soil Lab); BD and field capacity at PFC by unknown staff.
+    - **T0 (2022 baseline):** Matthew Kyriakides, Dr. Charlotte Norris (bulk soil); J and R (bulk density & water). Reid completed pH and bulk density; field capacity by unknown staff.\
+    - **2022:** Matthew Kyriakides, Dr. Charlotte Norris, C, R. Ccompleted pH, bulk density, and SLAKES; field capacity by unknown staff.\
+    - **2023:** Matthew Kyriakides, Dr. Charlotte Norris, C, N. SLAKES by Matthew, C, and N; pH and BD jointly by Matthew, T, and S; field capacity by unknown staff.\
+    - **2024:** Matthew Kyriakides, Dr. Charlotte Norris, A, T. SLAKES by Matthew (UVic Soil Lab); pH by L (UVic Soil Lab); BD and field capacity at PFC by unknown staff.
 
 ------------------------------------------------------------------------
 
@@ -195,7 +192,7 @@ This readme file was generated on 2026-03-18 by Matthew Kyriakides
 **Missing data codes:** All missing values coded as `na` in Excel and converted to `NA` in R via `na = "na"` in `read_excel()`.
 
 | **Type of Variable** | **Type of Data** | R Label | **n** | **Absent Data** |
-|-------------|-----------------|-------------|-------------|-----------------|
+|---------------|---------------|---------------|---------------|---------------|
 | Treatment | Categorical, ordinal (5 levels: 1-5) | treatment | 200 | None absent |
 | Bed | Categorical, discrete (60 levels: 1-60) |  | 180 | T0 – all (20) |
 | Year | Categorical, discrete (4 levels: 4 times) |  | 200 | None absent |
